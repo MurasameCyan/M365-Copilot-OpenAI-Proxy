@@ -1,0 +1,836 @@
+{
+  "summary_date": "2026-09-08",
+  "scope": "One M365 account; existing Studio agent; representative cases, not a full tone-by-protocol matrix.",
+  "model_identity_verified": false,
+  "raw_credentials_included": false,
+  "default_mapping": {
+    "Gpt_6_Astra": "gpt-6_Chat",
+    "Gpt_6_Reasoning": "gpt-6"
+  },
+  "ordinary_requests": [
+    {
+      "tone": "Gpt_5_6_Chat",
+      "utc": "2026-09-07T13:28:31.178102+00:00",
+      "latency_ms": 4875,
+      "first_text_ms": 2186,
+      "reply_chars": 260,
+      "sent": [
+        {
+          "tone": "Gpt_5_6_Chat",
+          "isStartOfSession": true
+        }
+      ],
+      "frame_types": {
+        "1": 13,
+        "2": 1,
+        "3": 1
+      },
+      "completion": [
+        {
+          "turn_state": "Completed",
+          "result": "Success"
+        }
+      ]
+    },
+    {
+      "tone": "Gpt_6_Astra",
+      "utc": "2026-09-07T13:28:40.343711+00:00",
+      "latency_ms": 7165,
+      "first_text_ms": 3649,
+      "reply_chars": 364,
+      "sent": [
+        {
+          "tone": "Gpt_6_Astra",
+          "isStartOfSession": true
+        }
+      ],
+      "frame_types": {
+        "1": 17,
+        "2": 1,
+        "3": 1
+      },
+      "completion": [
+        {
+          "turn_state": "Completed",
+          "result": "Success"
+        }
+      ]
+    },
+    {
+      "tone": "Gpt_6_Reasoning",
+      "utc": "2026-09-07T13:28:44.681621+00:00",
+      "latency_ms": 2335,
+      "first_text_ms": null,
+      "reply_chars": 0,
+      "sent": [
+        {
+          "tone": "Gpt_6_Reasoning",
+          "isStartOfSession": true
+        }
+      ],
+      "frame_types": {
+        "1": 3,
+        "2": 1,
+        "3": 1
+      },
+      "completion": [
+        {
+          "turn_state": "Failed",
+          "result": "InternalError"
+        }
+      ]
+    },
+    {
+      "tone": "Gpt_99_Invalid_Control",
+      "utc": "2026-09-07T13:28:46.918472+00:00",
+      "latency_ms": 235,
+      "first_text_ms": null,
+      "reply_chars": 0,
+      "sent": [
+        {
+          "tone": "Gpt_99_Invalid_Control",
+          "isStartOfSession": true
+        }
+      ],
+      "frame_types": {
+        "3": 1
+      },
+      "completion": []
+    },
+    {
+      "tone": "Gpt_6_Reasoning",
+      "utc": "2026-09-07T13:37:12.686538+00:00",
+      "latency_ms": 3499,
+      "first_text_ms": null,
+      "reply_chars": 0,
+      "sent": [
+        {
+          "tone": "Gpt_6_Reasoning",
+          "isStartOfSession": true
+        }
+      ],
+      "frame_types": {
+        "1": 3,
+        "2": 1,
+        "3": 1
+      },
+      "protocol_success": false,
+      "wire_errors": [],
+      "completion": [
+        {
+          "turn_state": "Failed",
+          "result": "InternalError"
+        }
+      ]
+    },
+    {
+      "tone": "Gpt_5_6_Chat",
+      "utc": "2026-09-07T13:37:19.020051+00:00",
+      "latency_ms": 4332,
+      "first_text_ms": 1831,
+      "reply_chars": 219,
+      "sent": [
+        {
+          "tone": "Gpt_5_6_Chat",
+          "isStartOfSession": true
+        }
+      ],
+      "frame_types": {
+        "1": 12,
+        "2": 1,
+        "3": 1
+      },
+      "protocol_success": true,
+      "wire_errors": [],
+      "completion": [
+        {
+          "turn_state": "Completed",
+          "result": "Success"
+        }
+      ]
+    },
+    {
+      "tone": "Gpt_99_Invalid_Control",
+      "utc": "2026-09-07T13:37:21.228229+00:00",
+      "latency_ms": 206,
+      "first_text_ms": null,
+      "reply_chars": 0,
+      "sent": [
+        {
+          "tone": "Gpt_99_Invalid_Control",
+          "isStartOfSession": true
+        }
+      ],
+      "frame_types": {
+        "3": 1
+      },
+      "protocol_success": false,
+      "wire_errors": [
+        {
+          "type": 3,
+          "error": "Failed to invoke 'Chat' due to an error on the server."
+        }
+      ],
+      "completion": []
+    },
+    {
+      "tone": "Gpt_6_Reasoning",
+      "utc": "2026-09-07T14:40:37.495272+00:00",
+      "latency_ms": 2456,
+      "first_text_ms": null,
+      "reply_chars": 0,
+      "sent": [
+        {
+          "tone": "Gpt_6_Reasoning",
+          "isStartOfSession": true
+        }
+      ],
+      "frame_types": {
+        "1": 3,
+        "2": 1,
+        "3": 1
+      },
+      "protocol_success": false,
+      "wire_errors": [],
+      "completion": [
+        {
+          "turn_state": "Failed",
+          "result": "InternalError"
+        }
+      ]
+    }
+  ],
+  "studio_question_requests": [
+    {
+      "tone": "Magic",
+      "utc": "2026-09-07T14:37:02.363464+00:00",
+      "latency_ms": 6656,
+      "first_text_ms": 3592,
+      "reply_chars": 368,
+      "sent": [
+        {
+          "tone": "Magic",
+          "isStartOfSession": true,
+          "studio_agent_attached": true
+        }
+      ],
+      "frame_types": {
+        "1": 16,
+        "2": 1,
+        "3": 1
+      },
+      "protocol_success": true,
+      "wire_errors": [],
+      "completion": [
+        {
+          "turn_state": "Completed",
+          "result": "Success"
+        }
+      ]
+    },
+    {
+      "tone": "Chat",
+      "utc": "2026-09-07T14:37:10.280117+00:00",
+      "latency_ms": 5914,
+      "first_text_ms": 3425,
+      "reply_chars": 302,
+      "sent": [
+        {
+          "tone": "Chat",
+          "isStartOfSession": true,
+          "studio_agent_attached": true
+        }
+      ],
+      "frame_types": {
+        "1": 15,
+        "2": 1,
+        "3": 1
+      },
+      "protocol_success": true,
+      "wire_errors": [],
+      "completion": [
+        {
+          "turn_state": "Completed",
+          "result": "Success"
+        }
+      ]
+    },
+    {
+      "tone": "Reasoning",
+      "utc": "2026-09-07T14:37:16.166240+00:00",
+      "latency_ms": 3884,
+      "first_text_ms": 1693,
+      "reply_chars": 242,
+      "sent": [
+        {
+          "tone": "Reasoning",
+          "isStartOfSession": true,
+          "studio_agent_attached": true
+        }
+      ],
+      "frame_types": {
+        "1": 13,
+        "2": 1,
+        "3": 1
+      },
+      "protocol_success": true,
+      "wire_errors": [],
+      "completion": [
+        {
+          "turn_state": "Completed",
+          "result": "Success"
+        }
+      ]
+    },
+    {
+      "tone": "Gpt_5_6_Chat",
+      "utc": "2026-09-07T14:37:22.336044+00:00",
+      "latency_ms": 4168,
+      "first_text_ms": 1537,
+      "reply_chars": 210,
+      "sent": [
+        {
+          "tone": "Gpt_5_6_Chat",
+          "isStartOfSession": true,
+          "studio_agent_attached": true
+        }
+      ],
+      "frame_types": {
+        "1": 12,
+        "2": 1,
+        "3": 1
+      },
+      "protocol_success": true,
+      "wire_errors": [],
+      "completion": [
+        {
+          "turn_state": "Completed",
+          "result": "Success"
+        }
+      ]
+    },
+    {
+      "tone": "Gpt_6_Astra",
+      "utc": "2026-09-07T14:37:30.177778+00:00",
+      "latency_ms": 5841,
+      "first_text_ms": 3837,
+      "reply_chars": 351,
+      "sent": [
+        {
+          "tone": "Gpt_6_Astra",
+          "isStartOfSession": true,
+          "studio_agent_attached": true
+        }
+      ],
+      "frame_types": {
+        "1": 14,
+        "2": 1,
+        "3": 1
+      },
+      "protocol_success": true,
+      "wire_errors": [],
+      "completion": [
+        {
+          "turn_state": "Completed",
+          "result": "Success"
+        }
+      ]
+    },
+    {
+      "tone": "Gpt_6_Reasoning",
+      "utc": "2026-09-07T14:37:38.874331+00:00",
+      "latency_ms": 6694,
+      "first_text_ms": 4351,
+      "reply_chars": 415,
+      "sent": [
+        {
+          "tone": "Gpt_6_Reasoning",
+          "isStartOfSession": true,
+          "studio_agent_attached": true
+        }
+      ],
+      "frame_types": {
+        "1": 15,
+        "2": 1,
+        "3": 1
+      },
+      "protocol_success": true,
+      "wire_errors": [],
+      "completion": [
+        {
+          "turn_state": "Completed",
+          "result": "Success"
+        }
+      ]
+    },
+    {
+      "tone": "Claude_Sonnet",
+      "utc": "2026-09-07T14:37:47.829205+00:00",
+      "latency_ms": 6952,
+      "first_text_ms": 3223,
+      "reply_chars": 670,
+      "sent": [
+        {
+          "tone": "Claude_Sonnet",
+          "isStartOfSession": true,
+          "studio_agent_attached": true
+        }
+      ],
+      "frame_types": {
+        "1": 12,
+        "2": 1,
+        "3": 1
+      },
+      "protocol_success": true,
+      "wire_errors": [],
+      "completion": [
+        {
+          "turn_state": "Completed",
+          "result": "Success"
+        }
+      ]
+    }
+  ],
+  "studio_tool_workflows": [
+    {
+      "case_id": "C01",
+      "tone": "Magic",
+      "protocol": "chat",
+      "stream": false,
+      "tool_ok": true,
+      "read_performed": true,
+      "answer_ok": true,
+      "sent": [
+        {
+          "tone": "Magic",
+          "fresh": true,
+          "studio": true,
+          "request_step": 1
+        },
+        {
+          "tone": "Magic",
+          "fresh": false,
+          "studio": true,
+          "request_step": 2
+        }
+      ],
+      "completions": [
+        {
+          "step": 1,
+          "turn_state": "Completed",
+          "result": "Success"
+        },
+        {
+          "step": 2,
+          "turn_state": "Completed",
+          "result": "Success"
+        }
+      ],
+      "stages": [
+        "studio",
+        "studio"
+      ],
+      "response_agent_matches": {
+        "1": 1,
+        "2": 1
+      },
+      "tone_preserved": true,
+      "same_studio_conversation": true,
+      "studio_only": true,
+      "passed": true
+    },
+    {
+      "case_id": "C02",
+      "tone": "Chat",
+      "protocol": "messages",
+      "stream": false,
+      "tool_ok": true,
+      "read_performed": true,
+      "answer_ok": true,
+      "sent": [
+        {
+          "tone": "Chat",
+          "fresh": true,
+          "studio": true,
+          "request_step": 1
+        },
+        {
+          "tone": "Chat",
+          "fresh": false,
+          "studio": true,
+          "request_step": 2
+        }
+      ],
+      "completions": [
+        {
+          "step": 1,
+          "turn_state": "Completed",
+          "result": "Success"
+        },
+        {
+          "step": 2,
+          "turn_state": "Completed",
+          "result": "Success"
+        }
+      ],
+      "stages": [
+        "studio",
+        "studio"
+      ],
+      "response_agent_matches": {
+        "1": 1,
+        "2": 1
+      },
+      "tone_preserved": true,
+      "same_studio_conversation": true,
+      "studio_only": true,
+      "passed": true
+    },
+    {
+      "case_id": "C03",
+      "tone": "Reasoning",
+      "protocol": "responses",
+      "stream": false,
+      "tool_ok": true,
+      "read_performed": true,
+      "answer_ok": true,
+      "answer_data_ok": true,
+      "expected_value_sha256": "3bc86acc55a02e71fe165037bf75d028d9ab23e99987f8dd7128e5002116e851",
+      "actual_value_sha256": "3bc86acc55a02e71fe165037bf75d028d9ab23e99987f8dd7128e5002116e851",
+      "sent": [
+        {
+          "tone": "Reasoning",
+          "fresh": true,
+          "studio": true,
+          "request_step": 1
+        },
+        {
+          "tone": "Reasoning",
+          "fresh": false,
+          "studio": true,
+          "request_step": 2
+        }
+      ],
+      "completions": [
+        {
+          "step": 1,
+          "turn_state": "Completed",
+          "result": "Success"
+        },
+        {
+          "step": 2,
+          "turn_state": "Completed",
+          "result": "Success"
+        }
+      ],
+      "stages": [
+        "studio",
+        "studio"
+      ],
+      "response_agent_matches": {
+        "1": 1,
+        "2": 1
+      },
+      "tone_preserved": true,
+      "same_studio_conversation": true,
+      "studio_only": true,
+      "workflow_passed": true,
+      "passed": true
+    },
+    {
+      "case_id": "C04",
+      "tone": "Gpt_5_6_Chat",
+      "protocol": "chat",
+      "stream": true,
+      "tool_ok": true,
+      "read_performed": true,
+      "answer_ok": true,
+      "sent": [
+        {
+          "tone": "Gpt_5_6_Chat",
+          "fresh": true,
+          "studio": true,
+          "request_step": 1
+        },
+        {
+          "tone": "Gpt_5_6_Chat",
+          "fresh": false,
+          "studio": true,
+          "request_step": 2
+        }
+      ],
+      "completions": [
+        {
+          "step": 1,
+          "turn_state": "Completed",
+          "result": "Success"
+        },
+        {
+          "step": 2,
+          "turn_state": "Completed",
+          "result": "Success"
+        }
+      ],
+      "stages": [
+        "studio",
+        "studio"
+      ],
+      "response_agent_matches": {
+        "1": 1,
+        "2": 1
+      },
+      "tone_preserved": true,
+      "same_studio_conversation": true,
+      "studio_only": true,
+      "passed": true
+    },
+    {
+      "case_id": "C05",
+      "tone": "Gpt_6_Astra",
+      "protocol": "responses",
+      "stream": true,
+      "tool_ok": true,
+      "read_performed": true,
+      "answer_ok": true,
+      "answer_data_ok": true,
+      "expected_value_sha256": "d4afcca3f4984c94c54fa7b0c1071598aba94b3044d153b49bcfa3ea42a2d73e",
+      "actual_value_sha256": "d4afcca3f4984c94c54fa7b0c1071598aba94b3044d153b49bcfa3ea42a2d73e",
+      "sent": [
+        {
+          "tone": "Gpt_6_Astra",
+          "fresh": true,
+          "studio": true,
+          "request_step": 1
+        },
+        {
+          "tone": "Gpt_6_Astra",
+          "fresh": false,
+          "studio": true,
+          "request_step": 2
+        }
+      ],
+      "completions": [
+        {
+          "step": 1,
+          "turn_state": "Completed",
+          "result": "Success"
+        },
+        {
+          "step": 2,
+          "turn_state": "Completed",
+          "result": "Success"
+        }
+      ],
+      "stages": [
+        "studio",
+        "studio"
+      ],
+      "response_agent_matches": {
+        "1": 1,
+        "2": 1
+      },
+      "tone_preserved": true,
+      "same_studio_conversation": true,
+      "studio_only": true,
+      "workflow_passed": true,
+      "passed": true
+    },
+    {
+      "case_id": "C06",
+      "tone": "Gpt_6_Reasoning",
+      "protocol": "messages",
+      "stream": true,
+      "tool_ok": true,
+      "read_performed": true,
+      "answer_ok": true,
+      "sent": [
+        {
+          "tone": "Gpt_6_Reasoning",
+          "fresh": true,
+          "studio": true,
+          "request_step": 1
+        },
+        {
+          "tone": "Gpt_6_Reasoning",
+          "fresh": false,
+          "studio": true,
+          "request_step": 2
+        }
+      ],
+      "completions": [
+        {
+          "step": 1,
+          "turn_state": "Completed",
+          "result": "Success"
+        },
+        {
+          "step": 2,
+          "turn_state": "Completed",
+          "result": "Success"
+        }
+      ],
+      "stages": [
+        "studio",
+        "studio"
+      ],
+      "response_agent_matches": {
+        "1": 1,
+        "2": 1
+      },
+      "tone_preserved": true,
+      "same_studio_conversation": true,
+      "studio_only": true,
+      "passed": true
+    },
+    {
+      "case_id": "C07",
+      "tone": "Claude_Sonnet",
+      "protocol": "chat",
+      "stream": false,
+      "tool_ok": true,
+      "read_performed": true,
+      "answer_ok": false,
+      "answer_data_ok": true,
+      "expected_value_sha256": "6c15f94a6248012b9ae7cd8d46a8d587c943deb61776189f4bc9ea20bf3a48f8",
+      "actual_value_sha256": "6c15f94a6248012b9ae7cd8d46a8d587c943deb61776189f4bc9ea20bf3a48f8",
+      "sent": [
+        {
+          "tone": "Claude_Sonnet",
+          "fresh": true,
+          "studio": true,
+          "request_step": 1
+        },
+        {
+          "tone": "Claude_Sonnet",
+          "fresh": false,
+          "studio": true,
+          "request_step": 2
+        }
+      ],
+      "completions": [
+        {
+          "step": 1,
+          "turn_state": "Completed",
+          "result": "Success"
+        },
+        {
+          "step": 2,
+          "turn_state": "Completed",
+          "result": "Success"
+        }
+      ],
+      "stages": [
+        "studio",
+        "studio"
+      ],
+      "response_agent_matches": {
+        "1": 1,
+        "2": 1
+      },
+      "tone_preserved": true,
+      "same_studio_conversation": true,
+      "studio_only": true,
+      "workflow_passed": true,
+      "passed": false
+    }
+  ],
+  "studio_workflow_totals": {
+    "tool_flow_successes": 7,
+    "strict_json_successes": 6,
+    "total": 7,
+    "strict_json_exception": "Claude_Sonnet returned correct data with an introductory sentence and a JSON code block."
+  },
+  "router_reasoning_workflow": {
+    "case_id": "C06",
+    "tone": "Gpt_6_Reasoning",
+    "protocol": "messages",
+    "stream": true,
+    "tool_ok": true,
+    "read_performed": true,
+    "answer_ok": false,
+    "answer_data_ok": false,
+    "expected_value_sha256": "470efb18b812c24fbfeb6caa8b24b53b2a87fec8ffa622bd2cc3e3aa76b9fd75",
+    "sent": [
+      {
+        "tone": "Gpt_6_Reasoning",
+        "fresh": true,
+        "studio": false,
+        "request_step": 1
+      },
+      {
+        "tone": "Gpt_6_Reasoning",
+        "fresh": true,
+        "studio": true,
+        "request_step": 1
+      },
+      {
+        "tone": "Gpt_6_Reasoning",
+        "fresh": true,
+        "studio": false,
+        "request_step": 2
+      }
+    ],
+    "completions": [
+      {
+        "step": 1,
+        "turn_state": "Failed",
+        "result": "InternalError"
+      },
+      {
+        "step": 1,
+        "turn_state": "Completed",
+        "result": "Success"
+      },
+      {
+        "step": 2,
+        "turn_state": "Failed",
+        "result": "InternalError"
+      }
+    ],
+    "stages": [
+      "studio",
+      "router"
+    ],
+    "response_agent_matches": {
+      "1": 1
+    },
+    "tone_preserved": true,
+    "same_studio_conversation": false,
+    "studio_only": false,
+    "workflow_passed": false,
+    "passed": false,
+    "planning_mode": "router",
+    "first_http": 200,
+    "second_http": 200
+  },
+  "local_source_sha256": [
+    {
+      "file": "round1.jsonl",
+      "sha256": "4cf262898d1679891d9dd3738eb147e2542a70de9cdeaa50f2e4685b9a934752"
+    },
+    {
+      "file": "round2.jsonl",
+      "sha256": "863e9f6b52c6acac426dac474435c8694a2b739091832240cbe13e7305edb2eb"
+    },
+    {
+      "file": "ordinary-reasoning-studio-control.jsonl",
+      "sha256": "3cb2ff7e292b3f63880c04ecbcdbf6add8b7fae7125e383d3c6f788990eb877f"
+    },
+    {
+      "file": "studio-tones-round1.jsonl",
+      "sha256": "ee5097e29094cfe8363373815d0694bd819f746fdf1c8b2136add1425de3211a"
+    },
+    {
+      "file": "studio-tools-follow-selected.jsonl",
+      "sha256": "5bab706b39e90a0a7b072a97a8117f52e59800331f37fd2420860bfcc97b19af"
+    },
+    {
+      "file": "studio-tools-final-check.jsonl",
+      "sha256": "111b75477894d96a1c573ddc636a536b21cc3dc0d6df82b929bae5b1175170f0"
+    },
+    {
+      "file": "router-reasoning-check-20260908.jsonl",
+      "sha256": "720b6ffaf1299d36b96683b229cf31d1795de1520d14990c1646477d7c4111a1"
+    }
+  ]
+}

@@ -32,6 +32,8 @@ from .routes_api_common import (
 from .routes_media_proxy import request_media_rewriter
 from .session_helpers import (
     _persistent_session,
+    _studio_history_context_id,
+    _studio_session_for_context,
     _studio_session_namespace,
     record_auto_session_response,
 )
@@ -41,7 +43,6 @@ from .session_store import PersistentSession
 from .sse_stream import keepalive_stream, merge_sse_headers
 from .substrate_client import SubstrateCopilotClient, SubstrateCopilotError, SubstrateThrottled
 from .studio_planner import (
-    STUDIO_TONE,
     PlannerTurn,
     ordered_or_answered,
     ordered_or_streamed,
@@ -108,6 +109,7 @@ def register_chat_routes(
         is_tool_result_continuation = bool(
             tools and request.messages and request.messages[-1].role == "tool"
         )
+        allow_final_answer = is_tool_result_continuation and choice[0] == "auto"
         _log.info("[/v1/chat/completions] stream=%s tools=%d messages=%d model=%s tool_choice=%s",
                   request.stream, len(tools) if tools else 0,
                   len(request.messages), request.model, choice[0])
@@ -197,14 +199,18 @@ def register_chat_routes(
                         studio_agent_id=studio_agent_id,
                         token_override=studio_token,
                     )
-                    studio_client._tone = STUDIO_TONE
+                    studio_client._tone = resolved_tone
                     studio_session = _persistent_session(
                         app,
                         raw_request,
                         normalized_session_model(request.model),
                         request.user,
                         request,
-                        namespace=_studio_session_namespace(studio_agent_id),
+                        namespace=_studio_session_namespace(studio_agent_id, resolved_tone),
+                    )
+                    studio_session = _studio_session_for_context(
+                        app, studio_session,
+                        _studio_history_context_id(request.messages, before_turn=True),
                     )
                     call_record["tool_planning"] = planning_mode
             extra_headers = None
@@ -442,6 +448,7 @@ def register_chat_routes(
                         on_studio_fallback=note_studio_fallback,
                         on_router_fallback=note_router_fallback,
                         skip_router_fallback=is_tool_result_continuation,
+                        allow_final_answer=allow_final_answer,
                     )
                     header_status = (
                         actual_planning
@@ -671,7 +678,7 @@ def register_chat_routes(
         # never substituted: the model's own answer is still the response.
         delivered = prose_with_reason(
             media_rewriter(text),
-            shortfall_note=shortfall_note,
+            shortfall_note="" if allow_final_answer and text.strip() else shortfall_note,
             declined_note=declined_note,
             declined=declined,
             rejected=rejected,
@@ -728,6 +735,7 @@ async def _openai_stream_with_tools(
     on_studio_fallback: Callable[[str], None] | None = None,
     on_router_fallback: Callable[[str], None] | None = None,
     skip_router_fallback: bool = False,
+    allow_final_answer: bool = False,
 ) -> AsyncIterator[str]:
     """Buffer full stream, then emit as tool_calls if found, else normal content stream.
 
@@ -924,7 +932,7 @@ async def _openai_stream_with_tools(
         # No tool calls found — re-stream as normal content
         delivered = prose_with_reason(
             text_transform(full_text) if text_transform is not None else full_text,
-            shortfall_note=shortfall_note,
+            shortfall_note="" if allow_final_answer and full_text.strip() else shortfall_note,
             declined_note=declined_note,
             declined=declined,
             rejected=rejected,

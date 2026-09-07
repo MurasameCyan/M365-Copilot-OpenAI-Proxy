@@ -8,12 +8,6 @@ from .session_store import PersistentSession
 from .substrate_client import SubstrateCopilotError, SubstrateThrottled
 
 
-# Studio declarative agents currently reject the Claude conversation modes on
-# this tenant. Keep planning on the M365 auto mode; the user's requested tone
-# still controls ordinary answer turns and remains in request diagnostics.
-STUDIO_TONE = "Magic"
-
-
 class ChatStreamClient(Protocol):
     def chat_stream(
         self,

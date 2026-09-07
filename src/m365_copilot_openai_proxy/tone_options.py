@@ -20,6 +20,11 @@ from __future__ import annotations
 # suffixed). Matching is case-insensitive upstream, so those are absences, not casing
 # slips: they are not tone values on this tenant and adding them would only route
 # traffic to a mode that answers nothing. Re-probe rather than re-add on faith.
+# Gpt_6_Astra completed a fresh direct M365 turn on 2026-09-07. The selector is
+# usable; the response does not attest the underlying model identity. See
+# docs/gpt6-tone-verification-2026-09-07.md. Gpt_6_Reasoning is listed by request
+# after successful Studio tool workflows, but ordinary calls still fail and
+# Router fails on the tool-result continuation. See README's GPT-6 restrictions.
 TONE_OPTIONS = [
     {"value": "Magic", "label": "Copilot_自动", "label_zh": "Copilot_自动", "label_en": "Copilot_自动"},
     {"value": "Chat", "label": "Copilot_快速答复", "label_zh": "Copilot_快速答复", "label_en": "Copilot_快速答复"},
@@ -28,6 +33,8 @@ TONE_OPTIONS = [
     {"value": "Claude_Sonnet_Reasoning", "label": "claude-sonnet-4-5", "label_zh": "claude-sonnet-4-5", "label_en": "claude-sonnet-4-5"},
     {"value": "Claude_Fable", "label": "claude-fable-5", "label_zh": "claude-fable-5", "label_en": "claude-fable-5"},
     {"value": "Claude_Opus", "label": "claude-opus", "label_zh": "claude-opus", "label_en": "claude-opus"},
+    {"value": "Gpt_6_Astra", "label": "gpt-6_Chat", "label_zh": "gpt-6_Chat", "label_en": "gpt-6_Chat"},
+    {"value": "Gpt_6_Reasoning", "label": "gpt-6", "label_zh": "gpt-6", "label_en": "gpt-6"},
     {"value": "Gpt_5_6_Chat", "label": "gpt-5.6_Chat", "label_zh": "gpt-5.6_Chat", "label_en": "gpt-5.6_Chat"},
     {"value": "Gpt_5_6_Reasoning", "label": "gpt-5.6", "label_zh": "gpt-5.6", "label_en": "gpt-5.6"},
     {"value": "Gpt_5_5_Chat", "label": "gpt-5.5_Chat", "label_zh": "gpt-5.5_Chat", "label_en": "gpt-5.5_Chat"},

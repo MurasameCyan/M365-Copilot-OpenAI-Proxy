@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import asyncio
+import hashlib
 import json
 import time
 
@@ -19,8 +20,8 @@ from m365_copilot_openai_proxy.session_helpers import (
     _persistent_session,
     _studio_session_namespace,
 )
+from m365_copilot_openai_proxy.session_store import PersistentSessionStore
 from m365_copilot_openai_proxy.substrate_client import SubstrateCopilotError
-from m365_copilot_openai_proxy.studio_planner import STUDIO_TONE
 from m365_copilot_openai_proxy.tone_options import router_applies, tool_planning_mode
 
 
@@ -80,6 +81,8 @@ class RecordingClient:
         self.reserve_before_failure = reserve_before_failure
         self.calls: list[tuple[str, object]] = []
         self.contexts: list[list[str]] = []
+        self.tones: list[str] = []
+        self.conversation_ids: list[str | None] = []
         self._tone = "Magic"
 
     async def chat(self, prompt, context=None, session=None, images=None):
@@ -90,6 +93,8 @@ class RecordingClient:
     async def chat_stream(self, prompt, context=None, session=None, images=None):
         self.calls.append((prompt, session))
         self.contexts.append(list(context or []))
+        self.tones.append(self._tone)
+        self.conversation_ids.append(session.conversation_id if session is not None else None)
         if self.reserve_before_failure and session is not None:
             session.reserve_turn()
         if self.fail:
@@ -190,6 +195,31 @@ def _responses_body(response, stream: bool) -> dict:
     )
 
 
+def _tool_request(
+    client, key, endpoint, *, stream=False, model="claude-sonnet-4-6",
+    session_id=None, **overrides,
+):
+    body = {"model": model, "stream": stream}
+    headers = {"Authorization": f"Bearer {key}"}
+    if endpoint == "responses":
+        body.update(input="read /tmp/a.txt", tools=[RESPONSES_READ_TOOL])
+    else:
+        body["messages"] = [{"role": "user", "content": "read /tmp/a.txt"}]
+        if endpoint == "messages":
+            headers = {"x-api-key": key}
+            body.update(max_tokens=256, tools=[{
+                "name": "Read",
+                "description": "Read a file",
+                "input_schema": READ_TOOL["function"]["parameters"],
+            }])
+        else:
+            body["tools"] = [READ_TOOL]
+    if session_id is not None:
+        headers["x-m365-session-id"] = session_id
+    body.update(overrides)
+    return client.post(f"/v1/{endpoint}", headers=headers, json=body)
+
+
 def _anthropic_tool_use(response, stream: bool) -> dict:
     if not stream:
         return next(
@@ -200,12 +230,23 @@ def _anthropic_tool_use(response, stream: bool) -> dict:
         for line in response.text.splitlines()
         if line.startswith("data: ")
     ]
-    return next(
-        event["content_block"]
+    start = next(
+        event
         for event in events
         if event.get("type") == "content_block_start"
         and event.get("content_block", {}).get("type") == "tool_use"
     )
+    block = dict(start["content_block"])
+    arguments = "".join(
+        event["delta"]["partial_json"]
+        for event in events
+        if event.get("type") == "content_block_delta"
+        and event.get("index") == start["index"]
+        and event.get("delta", {}).get("type") == "input_json_delta"
+    )
+    if arguments:
+        block["input"] = json.loads(arguments)
+    return block
 
 
 class ContextAwareResponsesClient:
@@ -244,6 +285,8 @@ class StudioResponsesContinuationClient:
     def __init__(self, *, studio: bool):
         self.studio = studio
         self.calls: list[tuple[str, str, list[str], object]] = []
+        self.tones: list[str] = []
+        self._tone = "Magic"
 
     async def chat(self, prompt, context=None, session=None, images=None):
         chunks = [
@@ -255,6 +298,7 @@ class StudioResponsesContinuationClient:
     async def chat_stream(self, prompt, context=None, session=None, images=None):
         context = list(context or [])
         self.calls.append(("stream", prompt, context, session))
+        self.tones.append(self._tone)
         if session is not None:
             session.reserve_turn()
         if any("Tool: Tool result" in item for item in context):
@@ -457,14 +501,14 @@ def test_studio_agent_namespace_changes_when_agent_is_rebound(tmp_path):
         raw,
         request.model,
         request=request,
-        namespace=_studio_session_namespace(AGENT_ID),
+        namespace=_studio_session_namespace(AGENT_ID, "Magic"),
     )
     second = _persistent_session(
         app,
         raw,
         request.model,
         request=request,
-        namespace=_studio_session_namespace(OTHER_AGENT_ID),
+        namespace=_studio_session_namespace(OTHER_AGENT_ID, "Magic"),
     )
 
     assert first.conversation_id != second.conversation_id
@@ -494,15 +538,174 @@ def test_ready_m365_tools_chat_uses_bound_studio_client(tmp_path, caplog):
     assert "planning this turn with a router turn instead" not in caplog.text
 
 
-def test_studio_planner_uses_compatible_tone_for_claude_request(tmp_path):
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize("endpoint", ["chat/completions", "responses", "messages"])
+@pytest.mark.parametrize("model,tone", [
+    ("claude-sonnet-4-6", "Claude_Sonnet"),
+    ("Gpt_6_Astra", "Gpt_6_Astra"),
+    ("m365-copilot", "Reasoning"),
+])
+def test_studio_planner_uses_selected_tone(endpoint, stream, model, tone, tmp_path):
     app, client, key, made = _app(tmp_path)
+    app.state.current_tone = "Reasoning"
 
-    response = _chat(client, key, model="claude-sonnet-4-6")
+    response = _tool_request(client, key, endpoint, stream=stream, model=model)
 
     assert response.status_code == 200
-    assert made[-1]._tone == STUDIO_TONE
-    assert app.state.call_log[-1]["tone"] == "Claude_Sonnet"
+    assert made[0].calls == []
+    assert made[-1].tones == [tone]
+    assert app.state.call_log[-1]["tone"] == tone
     assert app.state.call_log[-1]["tool_planning"] == "studio"
+
+
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize("endpoint", ["chat/completions", "responses", "messages"])
+def test_router_fallback_to_studio_keeps_selected_tone(endpoint, stream, tmp_path):
+    app, client, key, made = _app(
+        tmp_path, ordinary_outputs=["unreadable router decision"]
+    )
+    app.state.key_store.update(
+        app.state.key_store.resolve(key).id, tool_planning_mode="router"
+    )
+
+    response = _tool_request(client, key, endpoint, stream=stream)
+
+    assert response.status_code == 200
+    assert [item.studio_agent_id for item in made] == ["", AGENT_ID]
+    assert "You are a tool-use router" in made[0].calls[0][0]
+    assert [item.tones for item in made] == [["Claude_Sonnet"], ["Claude_Sonnet"]]
+    assert app.state.call_log[-1]["tool_planning"] == "studio"
+
+
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize("endpoint", ["chat/completions", "responses", "messages"])
+def test_studio_header_sessions_skip_legacy_threads_and_isolate_tones(
+    endpoint, stream, tmp_path,
+):
+    app, client, key, made = _app(tmp_path)
+    key_obj = app.state.key_store.resolve(key)
+    tenant = f"{key_obj.id}:{key_obj.account_id}"
+    ordinary_key = f"{tenant}:header:same"
+    ordinary = app.state.session_store.get(ordinary_key)
+    ordinary.reserve_turn()
+    legacy_digest = hashlib.sha256(AGENT_ID.encode()).hexdigest()[:16]
+    legacy_key = f"{tenant}:studio-{legacy_digest}:header:same"
+    legacy = app.state.session_store.get(legacy_key)
+    legacy.reserve_turn()
+
+    for model in ("Magic", "claude-sonnet-4-6", "Claude_Sonnet:persist"):
+        response = _tool_request(
+            client, key, endpoint, stream=stream, model=model, session_id="same"
+        )
+        assert response.status_code == 200
+
+    studio_clients = [item for item in made if item.studio_agent_id]
+    magic, claude, same_claude = [item.calls[0][1] for item in studio_clients]
+    assert magic is not legacy
+    assert magic.conversation_id != legacy.conversation_id
+    assert claude is not magic
+    assert same_claude is claude
+    assert all(item is not ordinary for item in (magic, claude, same_claude))
+    assert app.state.session_store.get_existing(ordinary_key) is ordinary
+    assert ordinary.turn_count == legacy.turn_count == 1
+
+
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize("endpoint,session_id", [
+    ("chat/completions", "tone-switch"),
+    ("chat/completions", None),
+    ("messages", "tone-switch"),
+    ("messages", None),
+    ("responses", "tone-switch"),
+])
+def test_returning_to_studio_tone_replays_intervening_history(
+    endpoint, session_id, stream, tmp_path,
+):
+    app, client, key, made = _app(
+        tmp_path,
+        studio_outputs=["NO_TOOL_NEEDED\nanswer-sentinel"],
+        reserve_studio_turn_before_failure=True,
+    )
+    history = []
+    previous_response_id = None
+    for model, task in [
+        ("claude-sonnet-4-6", "initial-task-sentinel"),
+        ("Gpt_6_Astra", "middle-task-sentinel"),
+        ("claude-sonnet-4-6", "return-task-sentinel"),
+        ("claude-sonnet-4-6", "same-tone-task-sentinel"),
+    ]:
+        history.append({"role": "user", "content": task})
+        turn = (
+            {"input": task, "previous_response_id": previous_response_id}
+            if endpoint == "responses"
+            else {"messages": history}
+        )
+        response = _tool_request(
+            client, key, endpoint, stream=stream, model=model,
+            session_id=session_id, **turn,
+        )
+        assert response.status_code == 200
+        assert "answer-sentinel" in response.text
+        if endpoint == "responses":
+            previous_response_id = _responses_body(response, stream)["id"]
+        history.append({"role": "assistant", "content": "answer-sentinel"})
+
+    studio_clients = [item for item in made if item.studio_agent_id]
+    assert len(studio_clients) == 4
+    assert studio_clients[2].conversation_ids != studio_clients[0].conversation_ids
+    # A stale thread may still have an in-flight owner; replace its store entry
+    # without mutating that owner's conversation id or lock in place.
+    assert [studio_clients[0].calls[0][1].conversation_id] == studio_clients[0].conversation_ids
+    assert studio_clients[3].conversation_ids == studio_clients[2].conversation_ids
+    assert "middle-task-sentinel" in "\n".join(studio_clients[2].contexts[0])
+    assert "middle-task-sentinel" not in "\n".join(studio_clients[3].contexts[0])
+    assert app.state.call_log[-1]["tool_planning"] == "studio"
+
+
+def test_studio_context_marker_survives_session_store_reload(tmp_path):
+    path = tmp_path / "sessions.json"
+    store = PersistentSessionStore(persist_path=path)
+    session = store.get("tenant:studio-v2-scope:header:same")
+    marker = "history-" + hashlib.sha256(b"private-conversation-sentinel").hexdigest()
+    session.studio_context_id = marker
+    session.reserve_turn()
+
+    restored = PersistentSessionStore(persist_path=path).get_existing(
+        "tenant:studio-v2-scope:header:same"
+    )
+
+    assert restored is not None
+    assert getattr(restored, "studio_context_id", "") == marker
+    assert "private-conversation-sentinel" not in path.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("stream", [False, True])
+def test_studio_incremental_translation_error_remains_bad_request(stream, tmp_path):
+    app, _client, key, made = _studio_responses_continuation_app(tmp_path)
+    client = TestClient(app, raise_server_exceptions=False)
+    first = _tool_request(
+        client, key, "responses", session_id="full-history-without-response-id"
+    )
+    assert first.status_code == 200
+    call = next(item for item in first.json()["output"] if item["type"] == "function_call")
+
+    continued = _tool_request(
+        client, key, "responses", stream=stream,
+        session_id="full-history-without-response-id",
+        input=[
+            {"role": "user", "content": "read /tmp/a.txt"},
+            call,
+            {
+                "type": "function_call_output",
+                "call_id": call["call_id"],
+                "output": "contents of /tmp/a.txt",
+            },
+        ],
+    )
+
+    assert continued.status_code == 400
+    assert "function_call_output" in continued.text
+    assert all(not item.calls for item in made[2:])
 
 
 def test_ready_m365_stream_uses_studio_and_reports_actual_header(tmp_path):
@@ -570,18 +773,43 @@ def test_chat_tool_stream_emits_keepalive_before_slow_studio_finishes():
 
 
 @pytest.mark.parametrize("stream", [False, True])
-def test_studio_corrective_retry_reuses_studio_client_and_session(stream, tmp_path):
+@pytest.mark.parametrize("endpoint", ["chat/completions", "responses", "messages"])
+def test_studio_corrective_retry_reuses_studio_client_and_session(
+    endpoint, stream, tmp_path,
+):
     app, client, key, made = _app(
         tmp_path,
         studio_outputs=[NATIVE_FILE_REPLY, READ_CALL],
     )
 
-    response = _chat(client, key, stream=stream)
+    # Avoid the read-only intent guard so the native file claim is corrected.
+    task = {"input": "inspect /tmp/a.txt"} if endpoint == "responses" else {
+        "messages": [{"role": "user", "content": "inspect /tmp/a.txt"}]
+    }
+    response = _tool_request(client, key, endpoint, stream=stream, **task)
 
     assert response.status_code == 200
     assert len(made) == 2
     assert made[0].calls == []
     assert len(made[1].calls) == 2
+    assert made[1].tones == ["Claude_Sonnet", "Claude_Sonnet"]
+    assert made[1].calls[0][1] is made[1].calls[1][1]
+    assert app.state.call_log[-1]["retried"] is True
+
+
+@pytest.mark.parametrize("stream", [False, True])
+def test_responses_required_retry_keeps_selected_studio_tone(stream, tmp_path):
+    app, client, key, made = _app(
+        tmp_path, studio_outputs=["NO_TOOL_NEEDED", READ_CALL]
+    )
+
+    response = _tool_request(
+        client, key, "responses", stream=stream, tool_choice="required"
+    )
+
+    assert response.status_code == 200
+    assert made[0].calls == []
+    assert made[1].tones == ["Claude_Sonnet", "Claude_Sonnet"]
     assert made[1].calls[0][1] is made[1].calls[1][1]
     assert app.state.call_log[-1]["retried"] is True
 
@@ -704,7 +932,7 @@ def test_responses_studio_tool_continuation_reuses_studio_namespace(
         "/v1/responses",
         headers={"Authorization": f"Bearer {key}"},
         json={
-            "model": "m365-copilot",
+            "model": "claude-sonnet-4-6",
             "input": "read /tmp/a.txt",
             "stream": stream,
             "tools": [RESPONSES_READ_TOOL],
@@ -718,7 +946,7 @@ def test_responses_studio_tool_continuation_reuses_studio_namespace(
         "/v1/responses",
         headers={"Authorization": f"Bearer {key}"},
         json={
-            "model": "m365-copilot",
+            "model": "claude-sonnet-4-6",
             "previous_response_id": first_body["id"],
             "input": [{
                 "type": "function_call_output",
@@ -736,8 +964,57 @@ def test_responses_studio_tool_continuation_reuses_studio_namespace(
     assert app.state.call_log[-1]["tool_planning"] == "studio"
     studio_clients = [item for item in made if item.studio]
     assert len(studio_clients) == 2
+    assert [item.tones for item in studio_clients] == [["Claude_Sonnet"], ["Claude_Sonnet"]]
     assert studio_clients[0].calls[0][3] is studio_clients[1].calls[0][3]
     assert any("Tool: Tool result" in item for item in studio_clients[1].calls[0][2])
+
+
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize("restart_reason", ["tone_change", "legacy_namespace"])
+def test_responses_new_studio_thread_restores_previous_task(
+    restart_reason, stream, monkeypatch, tmp_path,
+):
+    _app_obj, client, key, made = _studio_responses_continuation_app(tmp_path)
+    legacy = restart_reason == "legacy_namespace"
+    with monkeypatch.context() as migration:
+        if legacy:
+            legacy_digest = hashlib.sha256(AGENT_ID.encode()).hexdigest()[:16]
+            migration.setattr(
+                "m365_copilot_openai_proxy.routes_api_responses._studio_session_namespace",
+                lambda *_args: f"studio-{legacy_digest}",
+            )
+        first = _tool_request(
+            client, key, "responses", stream=stream,
+            model="Magic" if legacy else "claude-sonnet-4-6",
+            input="original-task-sentinel: inspect /tmp/a.txt",
+        )
+    assert first.status_code == 200
+    first_body = _responses_body(first, stream)
+    call = next(item for item in first_body["output"] if item["type"] == "function_call")
+
+    continued = _tool_request(
+        client, key, "responses", stream=stream,
+        model="claude-sonnet-4-6" if legacy else "Gpt_6_Astra",
+        previous_response_id=first_body["id"],
+        input=[{
+            "type": "function_call_output",
+            "call_id": call["call_id"],
+            "output": "tool-result-sentinel",
+        }],
+    )
+
+    assert continued.status_code == 200
+    assert "studio-final-answer" in json.dumps(_responses_body(continued, stream))
+    studio_clients = [item for item in made if item.studio]
+    assert len(studio_clients) == 2
+    first_session, next_session = [item.calls[0][3] for item in studio_clients]
+    assert next_session is not first_session
+    assert next_session.turn_count == 1
+    assert studio_clients[1].tones == ["Claude_Sonnet" if legacy else "Gpt_6_Astra"]
+    continuation_context = "\n".join(studio_clients[1].calls[0][2])
+    assert "original-task-sentinel" in continuation_context
+    assert "tool-result-sentinel" in continuation_context
+    assert all(not item.calls for item in made if not item.studio)
 
 
 @pytest.mark.parametrize("stream", [False, True])
@@ -747,7 +1024,7 @@ def test_chat_studio_tool_continuation_accepts_final_answer(stream, tmp_path):
         "/v1/chat/completions",
         headers={"Authorization": f"Bearer {key}"},
         json={
-            "model": "m365-copilot",
+            "model": "claude-sonnet-4-6",
             "messages": [{"role": "user", "content": "read /tmp/a.txt"}],
             "stream": stream,
             "tools": [READ_TOOL],
@@ -775,7 +1052,7 @@ def test_chat_studio_tool_continuation_accepts_final_answer(stream, tmp_path):
         "/v1/chat/completions",
         headers={"Authorization": f"Bearer {key}"},
         json={
-            "model": "m365-copilot",
+            "model": "claude-sonnet-4-6",
             "messages": [
                 {"role": "user", "content": "read /tmp/a.txt"},
                 {
@@ -799,6 +1076,7 @@ def test_chat_studio_tool_continuation_accepts_final_answer(stream, tmp_path):
     assert app.state.call_log[-1]["tool_planning"] == "studio"
     studio_clients = [item for item in made if item.studio]
     assert len(studio_clients) == 2
+    assert [item.tones for item in studio_clients] == [["Claude_Sonnet"], ["Claude_Sonnet"]]
     assert studio_clients[0].calls[0][3] is studio_clients[1].calls[0][3]
 
 
@@ -899,7 +1177,7 @@ def test_anthropic_studio_tool_continuation_reuses_studio_namespace(
         "/v1/messages",
         headers={"x-api-key": key},
         json={
-            "model": "m365-copilot",
+            "model": "claude-sonnet-4-6",
             "max_tokens": 256,
             "stream": stream,
             "messages": [{"role": "user", "content": "read /tmp/a.txt"}],
@@ -917,7 +1195,7 @@ def test_anthropic_studio_tool_continuation_reuses_studio_namespace(
         "/v1/messages",
         headers={"x-api-key": key},
         json={
-            "model": "m365-copilot",
+            "model": "claude-sonnet-4-6",
             "max_tokens": 256,
             "stream": stream,
             "messages": [
@@ -945,6 +1223,7 @@ def test_anthropic_studio_tool_continuation_reuses_studio_namespace(
     assert app.state.call_log[-1]["tool_planning"] == "studio"
     studio_clients = [item for item in made if item.studio]
     assert len(studio_clients) == 2
+    assert [item.tones for item in studio_clients] == [["Claude_Sonnet"], ["Claude_Sonnet"]]
     assert studio_clients[0].calls[0][3] is studio_clients[1].calls[0][3]
     continuation_context = "\n".join(studio_clients[1].calls[0][2])
     assert "Tool result" in continuation_context
@@ -1415,7 +1694,7 @@ def test_studio_error_fallback_resets_failed_studio_conversation(stream, tmp_pat
     assert response.status_code == 200
     key_obj = app.state.key_store.resolve(key)
     account = app.state.account_store.get(key_obj.account_id)
-    namespace = _studio_session_namespace(AGENT_ID)
+    namespace = _studio_session_namespace(AGENT_ID, "Magic")
     session = app.state.session_store.get_existing(
         f"{key_obj.id}:{account.id}:{namespace}:header:failed-studio"
     )

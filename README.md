@@ -67,7 +67,7 @@
 
 显示名中的空格会自动转为下划线，便于客户端当作 model id 使用。也可直接用 **底层 tone 值**（如 `Magic`、`Gpt_5_5_Chat`、`Claude_Sonnet`）请求；未匹配到任何模式时，回退到该 Key / 全局默认对话模式。
 
-#### 默认内置模式（开箱即用）
+#### 默认内置模式
 
 与代码中 `TONE_OPTIONS`（经规范化后）一致。可用 `curl -H "Authorization: Bearer <KEY>" http://localhost:8000/v1/models` 核对当前实例实际列表。
 
@@ -80,6 +80,8 @@
 | `Claude_Sonnet_Reasoning` | `claude-sonnet-4-5` | `claude-sonnet-4-5-持续` | Claude Sonnet 思考 |
 | `Claude_Fable` | `claude-fable-5` | `claude-fable-5-持续` | Claude Fable |
 | `Claude_Opus` | `claude-opus` | `claude-opus-持续` | Claude Opus |
+| `Gpt_6_Astra` | `gpt-6_Chat` | `gpt-6_Chat-持续` | 普通直连与 Studio 实测成功，底层型号未确认 |
+| `Gpt_6_Reasoning` | `gpt-6` | `gpt-6-持续` | Studio 路径实测成功；普通直连失败，使用前见下方限制 |
 | `Gpt_5_6_Chat` | `gpt-5.6_Chat` | `gpt-5.6_Chat-持续` | GPT 5.6 快速 |
 | `Gpt_5_6_Reasoning` | `gpt-5.6` | `gpt-5.6-持续` | GPT 5.6 思考 |
 | `Gpt_5_5_Chat` | `gpt-5.5_Chat` | `gpt-5.5_Chat-持续` | GPT 5.5 快速 |
@@ -91,9 +93,43 @@
 | `Gpt_5_2_Chat` | `gpt-5.2_Chat` | `gpt-5.2_Chat-持续` | GPT 5.2 快速 |
 | `Gpt_5_2_Reasoning` | `gpt-5.2` | `gpt-5.2-持续` | GPT 5.2 思考 |
 
-共 **34** 个默认可选模型 ID（17 模式 × 2 变体）。`Gpt_5_6_Chat` 与 `Gpt_5_3_Reasoning` 是后来才被上游放开的两个模式（2026-08-02 还在被拒名单里，08-28 / 08-25 复测已可用），因此**旧部署升级后不会自动出现**：持久化的 `runtime_settings.json` 优先于代码默认，只有当它仍与旧版默认逐字节相同才会自动迁移。已改过「对话模式列表」的实例请在 `/admin` → 运行设置里手工补这两行。
+共 **38** 个默认可选模型 ID（19 模式 × 2 变体）。目录表示可选择的 tone，**不表示当前账户能在所有路径下调用成功**。`Gpt_5_6_Chat` 与 `Gpt_5_3_Reasoning` 分别在此前的 08-28 / 08-25 复测中确认可用。
 
-某个模式能不能用由 M365 侧的 rollout 决定，与本项目无关：M365 拒绝服务的模式会返回 **400** 并在错误里点名该模式，不会静默回一句「Sorry, I wasn't able to respond to that.」当成模型回复。用 400 而非 502，是因为重试改变不了上游的拒绝——502 会让客户端把它当成网关故障反复重试。传输层故障（空闲超时、断流）与凭据问题仍然是 502。想知道当前账号实际能用哪些，跑仓库根目录的 `scan_tones.py`。
+**与历史默认列表完全相同的旧配置会在升级时自动迁移**，包括加入 Astra 之前的 17 模式列表和仅加入 Astra 的 18 模式列表。与这些历史默认列表不相同的自定义配置会被保留；需要新增模式时，请在 `/admin` → 运行设置中添加 `Gpt_6_Astra | gpt-6_Chat`、`Gpt_6_Reasoning | gpt-6`。
+
+Docker 部署升级时，需要在部署目录执行 `docker compose pull`，再执行 `docker compose up -d --force-recreate`，拉取新镜像并重建容器；之后在客户端刷新模型列表。代码推送和镜像构建不会自动更新已经运行的容器。
+
+#### Astra 与 Reasoning 的区别及使用限制
+
+以下是 **2026-09-07 至 09-08、同一 M365 账户**的实测结果，区别首先在于调用路径：
+
+| 场景 | `gpt-6_Chat` → `Gpt_6_Astra` | `gpt-6` → `Gpt_6_Reasoning` |
+| ---- | --------------------------- | -------------------------- |
+| 普通直连问答，不携带 Studio agent | 完成实际任务，`Completed / Success` | 多次 `Failed / InternalError`，没有任务答案 |
+| 直接携带有效 Studio agent 的问答实验 | 成功 | 成功 |
+| Studio 真实 `Read → 工具结果 → 最终 JSON` 流程 | 成功 | 成功 |
+| 当前使用建议 | 可用于普通聊天和已验证的 Studio 工具流程 | 仅按下列条件使用 Studio；普通聊天不适用 |
+
+这里的 `gpt-6_Chat`、`gpt-6` 是本项目明确配置的显示名映射。上游回包没有提供实际模型 ID、模型版本或部署标识，不能据名称或模型自述认定底层是真正的 GPT-6，也没有证据支持“Reasoning 更聪明、更慢或上下文更大”等差异。普通直连与 Studio 问答的证据见[初始实测](docs/gpt6-tone-verification-2026-09-07.md)、[Studio tone 实测](docs/studio-tone-verification-2026-09-07.md)。七个 tone 的真实工具流程验证通过 7/7，严格 JSON 格式通过 6/7（Claude Sonnet 附带额外前言），见[工具流程验证](docs/studio-selected-tone-2026-09-07.md)。
+
+**使用 `Gpt_6_Reasoning` 的步骤：**
+
+1. 使用绑定 **M365 企业账户**的 API Key，确认该账户已有有效、已就绪的 Studio agent。在 `/` 用户自助页的「默认配置」→「工具调用规划」选择 **Studio Agent**；也可在 `/admin` →「运行设置」设为全局值，并让该 Key 继承。
+2. 客户端选择 `gpt-6`（或直接传 `Gpt_6_Reasoning`），请求中声明实际要用的 `tools`。有效工具列表必须非空，`tool_choice` 必须不是 `none`；通常可用 `auto`，允许模型在工具完成后返回最终文本。
+3. 收到工具调用后，由客户端执行工具并提交真实结果。续轮继续使用相同模型、Studio 设置和有效工具定义；不要为了让模型总结而清空 `tools` 或改成 `tool_choice=none`，否则会离开 Studio 路径。
+4. 检查完整的“工具调用 → 真实结果 → 最终答案”，并检查调用记录中的实际规划阶段与回退信息。首轮成功或 HTTP 200 都不能单独证明完整流程成功。
+
+**必须了解的限制：**
+
+- **Studio 是工具规划模式。** 请求没有 `tools`、有效工具列表为空，或 `tool_choice=none` 时，即使设置了 Studio，也会走普通直连。因此上表“携带 agent 的问答实验成功”不等于当前兼容 API 的无工具纯聊天可用。
+- **有效 agent 是前提。** agent 缺失或未就绪时会回退 Router；Studio 在首个输出前不可用也可能触发回退。对当前实测的 Reasoning 而言，回到普通路径仍会失败。选择 Studio 设置本身不能保证 agent 可用。
+- **工具调用规划的 `auto` / `native` 不等同于 `studio`，Router 也不能替代上述条件。** 2026-09-08 的 Router 实测中，普通 Reasoning 分类先报 `InternalError`，Studio 兜底成功发出 `Read`；提交工具结果后，续轮又走普通 Reasoning 并失败。两轮 HTTP 均为 200，第二轮正文却是上游错误，未完成最终答案。
+- **`-持续` / `:persist` 只改变会话复用方式**，不会解锁 tone、补齐 agent，也不会把普通聊天转成 Studio。
+- 以上可用性限于实测账户和时间窗口，会受 Microsoft rollout 影响。加入默认目录方便选择，不构成通用可用或长期稳定的保证。
+
+三个兼容 API 的 Studio 工具首轮、结果续轮、纠正重试，以及进入 Studio 的路由回退，都使用客户端所选模型解析出的 tone。升级前固定 `Magic` 的 Studio 会话会与新版会话隔离；切换 tone 会隔离上游线程，A→B→A 切回时按客户端历史恢复必要上下文。这里保证的是代理实际发送的 tone；回退到普通路径能否成功，仍取决于该 tone 在那条路径上的可用性。
+
+某个模式能不能用由 M365 侧的 rollout 决定：M365 拒绝服务的模式在响应尚未开始时会返回 **400** 并在错误里点名该模式，不会静默回一句「Sorry, I wasn't able to respond to that.」当成模型回复。流式响应已经开始时，HTTP 状态可能仍为 200，错误会写入流或正文，调用方必须检查最终内容。用 400 而非 502，是因为重试改变不了上游的拒绝——502 会让客户端把它当成网关故障反复重试。传输层故障（空闲超时、断流）与凭据问题仍然是 502。想知道当前账号实际能用哪些，跑仓库根目录的 `scan_tones.py`。
 
 #### 请求示例
 

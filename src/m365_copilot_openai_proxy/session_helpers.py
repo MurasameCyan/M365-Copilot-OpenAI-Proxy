@@ -20,18 +20,60 @@ _SESSION_ID_HEADER = "x-m365-session-id"
 _RESP_ID_PREFIX = "resp_"
 
 
-def _studio_session_namespace(agent_id: str | None) -> str:
-    """Return an opaque per-Agent namespace for Studio conversations.
+def _studio_session_namespace(agent_id: str | None, tone: str) -> str:
+    """Return an opaque per-Agent and per-tone Studio conversation namespace.
 
     The raw Agent ID is tenant metadata and must not become part of a session
-    key.  Hashing it also makes a rebind land on a fresh conversation instead
-    of accidentally continuing the previous Agent's thread.
+    key. Rebinding the Agent or selecting another tone starts a separate thread.
+    The version also isolates conversations started by the old fixed-Magic path.
     """
     normalized = str(agent_id or "").strip()
-    if not normalized:
-        return "studio"
-    digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:16]
-    return f"studio-{digest}"
+    scope = json.dumps([normalized, tone], ensure_ascii=False, separators=(",", ":"))
+    digest = hashlib.sha256(scope.encode("utf-8")).hexdigest()[:16]
+    return f"studio-v2-{digest}"
+
+
+def _studio_history_context_id(
+    messages: list[Any], *, before_turn: bool = False,
+) -> str | None:
+    canonical = [
+        item.model_dump(mode="json", exclude_none=True)
+        if hasattr(item, "model_dump") else dict(item)
+        for item in messages
+    ]
+    if before_turn:
+        last_assistant = max(
+            (i for i, item in enumerate(canonical) if item.get("role") == "assistant"),
+            default=-1,
+        )
+        if last_assistant < 0:
+            return None
+        canonical = canonical[:last_assistant + 1]
+    for item in canonical:
+        if item.get("tool_calls"):
+            # Streaming clients may retain the transport-only call index.
+            item["tool_calls"] = [
+                {key: value for key, value in call.items() if key != "index"}
+                for call in item["tool_calls"]
+            ]
+    payload = json.dumps(normalize_history(canonical), ensure_ascii=False, separators=(",", ":"))
+    return "history-" + hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _studio_session_for_context(
+    app: Any, session: PersistentSession | None, context_id: str | None,
+) -> PersistentSession | None:
+    if (
+        session is None
+        or session.turn_count == 0
+        or context_id is None
+        or session.studio_context_id == context_id
+    ):
+        return session
+    # Do not reset an existing object's conversation/lock: an in-flight request
+    # may still own it. Replacing the store entry gives this history a fresh owner.
+    key = app.state.session_store.key_for(session)
+    return app.state.session_store.reset(key) if key else PersistentSession()
 
 
 def _request_tenant(raw_request: Request) -> str:
@@ -230,7 +272,13 @@ def record_auto_session_response(
     if session is None:
         return
     key = app.state.session_store.key_for(session)
-    if not key or ":auto:" not in key:
+    if not key:
+        return
+    if key.startswith(f"{_request_tenant(raw_request)}:studio-v2-"):
+        session.record_studio_context(
+            _studio_history_context_id([*request.messages, assistant]) or ""
+        )
+    if ":auto:" not in key:
         return
     index = getattr(app.state, "history_index", None)
     if index is None:

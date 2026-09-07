@@ -29,13 +29,14 @@ from .session_helpers import (
     _messages_session_key,
     _persistent_session,
     record_auto_session_response,
+    _studio_history_context_id,
+    _studio_session_for_context,
     _studio_session_namespace,
 )
 from .session_store import PersistentSession
 from .sse_stream import ANTHROPIC_PING, keepalive_stream, merge_sse_headers
 from .substrate_client import SubstrateCopilotClient, SubstrateCopilotError, SubstrateThrottled
 from .studio_planner import (
-    STUDIO_TONE,
     PlannerTurn,
     ordered_or_answered,
     ordered_or_streamed,
@@ -151,6 +152,7 @@ def register_messages_routes(
                     for block in request.messages[-1].content
                 )
             )
+            allow_final_answer = is_tool_result_continuation and choice[0] == "auto"
             session = None
             if not is_consumer:
                 session = _persistent_session(
@@ -190,14 +192,18 @@ def register_messages_routes(
                         studio_agent_id=studio_agent_id,
                         token_override=studio_token,
                     )
-                    studio_client._tone = STUDIO_TONE
+                    studio_client._tone = resolved_tone
                     studio_session = _persistent_session(
                         app,
                         raw_request,
                         normalized_session_model(request.model),
                         _messages_session_key(request),
                         request,
-                        namespace=_studio_session_namespace(studio_agent_id),
+                        namespace=_studio_session_namespace(studio_agent_id, resolved_tone),
+                    )
+                    studio_session = _studio_session_for_context(
+                        app, studio_session,
+                        _studio_history_context_id(request.messages, before_turn=True),
                     )
                     if studio_session is not None:
                         studio_translated = translate_anthropic_request(
@@ -416,6 +422,7 @@ def register_messages_routes(
                         on_studio_fallback=note_studio_fallback,
                         on_router_fallback=note_router_fallback,
                         skip_router_fallback=is_tool_result_continuation,
+                        allow_final_answer=allow_final_answer,
                 )
                 if tool_names and planning_mode in {"studio", "router"}:
                     extra_headers = {TOOL_CALLING_HEADER: actual_planning}
@@ -617,7 +624,7 @@ def register_messages_routes(
         blocks = [{"type": "text", "text": media_rewriter(raw_text)}]
         reason = prose_with_reason(
             "",
-            shortfall_note=shortfall_note,
+            shortfall_note="" if allow_final_answer and raw_text.strip() else shortfall_note,
             declined_note=declined_note,
             declined=declined,
             rejected=rejected,
@@ -683,6 +690,7 @@ async def _anthropic_stream_with_tools(
     on_studio_fallback: Callable[[str], None] | None = None,
     on_router_fallback: Callable[[str], None] | None = None,
     skip_router_fallback: bool = False,
+    allow_final_answer: bool = False,
 ) -> AsyncIterator[str]:
     """Buffer the turn, then emit Anthropic tool_use blocks if tool_calls are found.
 
@@ -812,7 +820,7 @@ async def _anthropic_stream_with_tools(
     if not blocks:
         text_out = prose_with_reason(
             text_out,
-            shortfall_note=shortfall_note,
+            shortfall_note="" if allow_final_answer and text_out.strip() else shortfall_note,
             declined_note=declined_note,
             declined=declined,
             rejected=rejected,

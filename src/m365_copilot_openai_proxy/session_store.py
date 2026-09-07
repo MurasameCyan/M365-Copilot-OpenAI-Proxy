@@ -46,6 +46,9 @@ class PersistentSession:
     consumed_response_ids: list[str] = field(default_factory=list)
     latest_response_id: str | None = None
     pending_response_ids: dict[str, str] = field(default_factory=dict, repr=False)
+    # Studio alone uses an opaque history digest/response id to detect turns
+    # answered on another tone's parallel thread. Never store message text here.
+    studio_context_id: str = ""
     # Called after turn_count changes so the store can persist to disk.
     _on_change: Callable[[], None] | None = field(default=None, repr=False, compare=False)
 
@@ -60,6 +63,11 @@ class PersistentSession:
         if self._on_change is not None:
             self._on_change()
         return turn
+
+    def record_studio_context(self, context_id: str) -> None:
+        self.studio_context_id = context_id
+        if self._on_change is not None:
+            self._on_change()
 
     def reset_conversation(self) -> None:
         """Abandon the current M365 conversation and start a fresh one in place.
@@ -77,6 +85,7 @@ class PersistentSession:
         self.conversation_id = str(uuid.uuid4())
         self.client_session_id = str(uuid.uuid4())
         self.turn_count = 0
+        self.studio_context_id = ""
         self.last_accessed = time.time()
         if self._on_change is not None:
             self._on_change()
@@ -276,6 +285,9 @@ class PersistentSessionStore:
             latest_response_id = s.get("latest_response_id")
             if latest_response_id not in clean_issued_response_calls:
                 latest_response_id = next(reversed(clean_issued_response_calls), None)
+            studio_context_id = s.get("studio_context_id")
+            if not isinstance(studio_context_id, str):
+                studio_context_id = ""
             try:
                 session = PersistentSession(
                     conversation_id=s["conversation_id"],
@@ -299,6 +311,7 @@ class PersistentSessionStore:
                         if isinstance(response_id, str)
                     ][-64:],
                     latest_response_id=latest_response_id,
+                    studio_context_id=studio_context_id,
                 )
             except (KeyError, TypeError, ValueError):
                 continue
@@ -379,6 +392,7 @@ class PersistentSessionStore:
                     "issued_response_contexts": self._encrypted_response_contexts(s),
                     "consumed_response_ids": s.consumed_response_ids,
                     "latest_response_id": s.latest_response_id,
+                    "studio_context_id": s.studio_context_id,
                 }
                 for key, s in self._sessions.items()
             }

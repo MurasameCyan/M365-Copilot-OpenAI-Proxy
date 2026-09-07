@@ -40,11 +40,11 @@ from .session_helpers import (
     _responses_store_key,
     _responses_store_key_belongs_to_request,
     _studio_session_namespace,
+    _studio_session_for_context,
 )
 from .substrate_client import SubstrateCopilotClient, SubstrateCopilotError
 from .sse_stream import keepalive_stream, merge_sse_headers
 from .studio_planner import (
-    STUDIO_TONE,
     PlannerTurn,
     ordered_or_answered,
 )
@@ -280,6 +280,7 @@ def register_responses_routes(
             studio_fallback = ""
             router_prompt = ""
             router_response_context: dict | None = None
+            parent_router_context: dict | None = None
             if tool_names and planning_mode in {"studio", "router"}:
                 account = getattr(raw.state, "account", None)
                 if is_consumer:
@@ -297,7 +298,7 @@ def register_responses_routes(
                         studio_agent_id=studio_agent_id,
                         token_override=studio_token,
                     )
-                    studio_client._tone = STUDIO_TONE
+                    studio_client._tone = resolved_tone
                     actual_planning = planning_mode
 
             if tool_names and (
@@ -383,26 +384,6 @@ def register_responses_routes(
                         fallback_key,
                     )
                     session_key = _responses_store_key(app, session)
-            if studio_client is not None:
-                studio_session = _namespaced_session(
-                    app,
-                    raw,
-                    session,
-                    _studio_session_namespace(studio_agent_id),
-                )
-                studio_translated = translate_responses_request(
-                    request,
-                    incremental=(
-                        studio_session is not None and studio_session.turn_count > 0
-                    ),
-                    system_override=system_override,
-                    consumer_tool_max_chars=(
-                        settings.consumer_prompt_max_chars if is_consumer else None
-                    ),
-                    allow_unmatched_function_call_outputs=(
-                        previous_session is not None
-                    ),
-                )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -493,10 +474,49 @@ def register_responses_routes(
                         ),
                     )
 
+            if studio_client is not None:
+                studio_session = _namespaced_session(
+                    app,
+                    raw,
+                    session,
+                    _studio_session_namespace(studio_agent_id, resolved_tone),
+                )
+                studio_session = _studio_session_for_context(
+                    app, studio_session, continuation_id,
+                )
+                try:
+                    studio_translated = translate_responses_request(
+                        request,
+                        incremental=(
+                            studio_session is not None and studio_session.turn_count > 0
+                        ),
+                        system_override=system_override,
+                        consumer_tool_max_chars=(
+                            settings.consumer_prompt_max_chars if is_consumer else None
+                        ),
+                        allow_unmatched_function_call_outputs=(
+                            previous_session is not None
+                        ),
+                    )
+                except ValueError as exc:
+                    raise HTTPException(status_code=400, detail=str(exc)) from exc
+                if (
+                    studio_session is not None
+                    and studio_session.turn_count == 0
+                    and parent_router_context is not None
+                ):
+                    # A changed tone or namespace starts without upstream history;
+                    # previous_response_id may carry only the new tool output.
+                    studio_translated = _restore_router_answer_context(
+                        studio_translated, parent_router_context
+                    )
+
             def record_issued_response(response_id: str, call_ids: list[str]) -> None:
                 nonlocal pending_response_calls, pending_response_context
                 if session is None:
                     return
+                if studio_session is not None and actual_planning == "studio":
+                    studio_session.record_studio_context(response_id)
                 response_context = (
                     router_response_context
                     if isinstance(router_response_context, dict)

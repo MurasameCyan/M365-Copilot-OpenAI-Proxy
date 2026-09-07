@@ -19,6 +19,8 @@ EXPECTED_TONE_VALUES = {
     "Claude_Sonnet_Reasoning",
     "Claude_Fable",
     "Claude_Opus",
+    "Gpt_6_Astra",
+    "Gpt_6_Reasoning",
     "Gpt_5_6_Chat",
     "Gpt_5_6_Reasoning",
     "Gpt_5_5_Chat",
@@ -39,6 +41,8 @@ EXPECTED_TONE_OPTIONS = [
     ("Claude_Sonnet_Reasoning", "claude-sonnet-4-5"),
     ("Claude_Fable", "claude-fable-5"),
     ("Claude_Opus", "claude-opus"),
+    ("Gpt_6_Astra", "gpt-6_Chat"),
+    ("Gpt_6_Reasoning", "gpt-6"),
     ("Gpt_5_6_Chat", "gpt-5.6_Chat"),
     ("Gpt_5_6_Reasoning", "gpt-5.6"),
     ("Gpt_5_5_Chat", "gpt-5.5_Chat"),
@@ -153,8 +157,32 @@ def test_read_runtime_settings_preserves_reordered_previous_m365_default(tmp_pat
 # way would pass even if both were wrong together. Labels are the current ones --
 # only the tone set differs from today's default.
 EXPECTED_TONE_VALUE_ORDER = [value for value, _label in EXPECTED_TONE_OPTIONS]
+DEFAULT_VALUES_BEFORE_GPT_6_ASTRA = [
+    "Magic",
+    "Chat",
+    "Reasoning",
+    "Claude_Sonnet",
+    "Claude_Sonnet_Reasoning",
+    "Claude_Fable",
+    "Claude_Opus",
+    "Gpt_5_6_Chat",
+    "Gpt_5_6_Reasoning",
+    "Gpt_5_5_Chat",
+    "Gpt_5_5_Reasoning",
+    "Gpt_5_4_Chat",
+    "Gpt_5_4_Reasoning",
+    "Gpt_5_3_Chat",
+    "Gpt_5_3_Reasoning",
+    "Gpt_5_2_Chat",
+    "Gpt_5_2_Reasoning",
+]
+DEFAULT_VALUES_BEFORE_GPT_6_REASONING = [
+    *DEFAULT_VALUES_BEFORE_GPT_6_ASTRA[:7],
+    "Gpt_6_Astra",
+    *DEFAULT_VALUES_BEFORE_GPT_6_ASTRA[7:],
+]
 DEFAULT_VALUES_BEFORE_GPT_5_6_CHAT = [
-    v for v in EXPECTED_TONE_VALUE_ORDER if v != "Gpt_5_6_Chat"
+    v for v in DEFAULT_VALUES_BEFORE_GPT_6_ASTRA if v != "Gpt_5_6_Chat"
 ]
 DEFAULT_VALUES_BEFORE_GPT_5_3_REASONING = [
     v for v in DEFAULT_VALUES_BEFORE_GPT_5_6_CHAT if v != "Gpt_5_3_Reasoning"
@@ -172,6 +200,8 @@ def test_read_runtime_settings_migrates_defaults_that_predate_each_added_tone(tm
     # old-label literal nor the current default, and every tone added afterwards
     # was locked out of the picker until someone wrote the list by hand.
     for pinned in (
+        DEFAULT_VALUES_BEFORE_GPT_6_REASONING,
+        DEFAULT_VALUES_BEFORE_GPT_6_ASTRA,
         DEFAULT_VALUES_BEFORE_GPT_5_6_CHAT,
         DEFAULT_VALUES_BEFORE_GPT_5_3_REASONING,
     ):

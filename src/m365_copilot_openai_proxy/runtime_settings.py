@@ -59,7 +59,7 @@ _PREVIOUS_BUILTIN_TONE_OPTIONS = [
 # *before* the tone existed matches no literal otherwise, and the operator's
 # picker silently never gains the tone no matter which image they deploy. That is
 # how production ended up two tones behind its own image and needed a hand-write.
-_TONES_ADDED_SINCE_RENAME = ("Gpt_5_6_Chat", "Gpt_5_3_Reasoning")
+_TONES_ADDED_SINCE_RENAME = ("Gpt_6_Reasoning", "Gpt_6_Astra", "Gpt_5_6_Chat", "Gpt_5_3_Reasoning")
 
 
 def _tone_default_without(*values: str) -> list[dict]:

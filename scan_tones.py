@@ -52,6 +52,9 @@ from m365_copilot_openai_proxy.tone_options import TONE_OPTIONS
 # Gpt_5_Chat, Gpt_5_Reasoning, Balanced/Creative/Precise_Classic, Auto, Default,
 # Pro, Thinking, Deep_Research, Researcher, Analyst, Smart, Think_Deeper, Agent,
 # Vision.
+# Update 2026-09-07: Gpt_6_Astra now answers and is in TONE_OPTIONS; the earlier
+# Gpt_6_* guesses are no longer grounds to exclude all GPT-6 selectors. The exact
+# Gpt_6_Reasoning selector returned Failed/InternalError in two fresh direct turns.
 #
 # The GPT grid is closed on both sides: 5_1 and 5_7 are unknown while every
 # 5_2..5_6 x {Chat,Reasoning} pair is real, so a new version appears as a NEW minor
