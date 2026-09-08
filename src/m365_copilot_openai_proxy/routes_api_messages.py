@@ -51,7 +51,7 @@ from .tool_call_parser import (
     _extract_tool_calls,
     _filter_read_only_tool_calls,
     _filter_schema_valid_tool_calls,
-    _has_read_only_intent,
+    _read_only_intent_for_messages,
     _looks_like_fake_file_claim,
     planner_fallback_needed,
     _strip_tool_call_blocks,
@@ -60,7 +60,6 @@ from .tool_call_parser import (
 from .translator import (
     _anthropic_tools_as_openai,
     effective_tools,
-    flatten_content,
     normalize_tool_choice,
     tool_description_lines,
     translate_anthropic_request,
@@ -133,8 +132,9 @@ def register_messages_routes(
             _key_sp = ((_key_obj.system_prompt if _key_obj is not None else "") or "").strip()
             _system_override = _key_sp or getattr(app.state, "system_prompt", "")
             run_permission = effective_run_permission(app, _key_obj)
-            read_only_guard = run_permission == "read_only" or _has_read_only_intent(
-                *(flatten_content(m.content) for m in request.messages if m.role == "user")
+            read_only_guard = run_permission == "read_only" or _read_only_intent_for_messages(
+                ((m.role, m.content) for m in request.messages),
+                instructions=request.system,
             )
             translated = translate_anthropic_request(
                 request,
@@ -143,13 +143,18 @@ def register_messages_routes(
                     settings.consumer_prompt_max_chars if is_consumer else None
                 ),
             )
+            # Match the translator's last non-system message. CC may append
+            # system metadata after a tool result; the turn is still its answer.
+            last_content_message = next(
+                (m for m in reversed(request.messages) if m.role != "system"), None
+            )
             is_tool_result_continuation = bool(
-                request.messages
-                and request.messages[-1].role == "user"
-                and isinstance(request.messages[-1].content, list)
+                last_content_message is not None
+                and last_content_message.role == "user"
+                and isinstance(last_content_message.content, list)
                 and any(
                     getattr(block, "type", None) == "tool_result"
-                    for block in request.messages[-1].content
+                    for block in last_content_message.content
                 )
             )
             allow_final_answer = is_tool_result_continuation and choice[0] == "auto"
@@ -547,7 +552,9 @@ def register_messages_routes(
         if tool_names:
             raw_text, declined = split_no_tool_marker(raw_text)
         tool_calls = _resolve_tool_calls(raw_text, tool_names, read_only_guard, declined)
-        if not tool_calls and tool_names and not read_only_guard and not declined and _looks_like_fake_file_claim(raw_text):
+        # After a host tool result, a normal "file created" acknowledgement is
+        # legitimate. Forcing another Write here would repeat completed work.
+        if not tool_calls and tool_names and not read_only_guard and not declined and not allow_final_answer and _looks_like_fake_file_claim(raw_text):
             _log.info("  fake file claim detected, forcing corrective retry")
             try:
                 retry_uses_studio = (
@@ -755,7 +762,7 @@ async def _anthropic_stream_with_tools(
 
         full_text, declined = split_no_tool_marker(full_text)
         tool_calls = _resolve_tool_calls(full_text, tool_names or set(), read_only_guard, declined)
-        if not tool_calls and tool_names and not read_only_guard and not declined and _looks_like_fake_file_claim(full_text):
+        if not tool_calls and tool_names and not read_only_guard and not declined and not allow_final_answer and _looks_like_fake_file_claim(full_text):
             _log.info("  fake file claim detected, forcing corrective retry")
             retry_chunks: list[str] = []
             retry_uses_studio = (

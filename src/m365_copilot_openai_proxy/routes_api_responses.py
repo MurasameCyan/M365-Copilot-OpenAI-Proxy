@@ -52,14 +52,13 @@ from .studio_agent_discovery import ensure_studio_client_snapshot
 from .tone_resolver import normalized_session_model
 from .tool_call_parser import (
     _RETRY_INSTRUCTION,
-    _has_read_only_intent,
+    _read_only_intent_for_messages,
     _looks_like_fake_file_claim,
     planner_fallback_needed,
     _strip_tool_call_blocks,
     split_no_tool_marker,
 )
 from .translator import (
-    _responses_content_text,
     _responses_last_action_index,
     responses_tool_config,
     tool_description_lines,
@@ -200,19 +199,20 @@ def register_responses_routes(
                 app.state, "system_prompt", ""
             )
             run_permission = effective_run_permission(app, key_obj)
-            user_texts = (
-                [request.input]
+            intent_messages = (
+                [("user", request.input)]
                 if isinstance(request.input, str)
                 else [
-                    _responses_content_text(item.get("content"))
+                    (item.get("role", ""), item.get("content"))
                     for item in request.input
-                    if isinstance(item, dict) and item.get("role") == "user"
+                    if isinstance(item, dict)
                 ]
             )
-            latest_user_text = user_texts[-1] if user_texts else ""
             read_only_guard = (
                 run_permission == "read_only"
-                or _has_read_only_intent(latest_user_text)
+                or _read_only_intent_for_messages(
+                    intent_messages, instructions=request.instructions or ""
+                )
             )
             previous_session_key = _decode_responses_session_id(
                 request.previous_response_id,
@@ -261,6 +261,7 @@ def register_responses_routes(
                 and request.input[last_action_index].get("type")
                 == "function_call_output"
             )
+            allow_final_answer = is_tool_output_continuation and choice[0] == "auto"
             translated = translate_responses_request(
                 request,
                 system_override=system_override,
@@ -452,6 +453,16 @@ def register_responses_routes(
                             request.previous_response_id or ""
                         )
                     )
+                elif incremental_output_ids:
+                    # A client may append metadata as a user-side reminder after
+                    # the tool result. It is not a new task or permission grant.
+                    read_only_guard = read_only_guard or _read_only_intent_for_messages(
+                        intent_messages,
+                        instructions=request.instructions or "",
+                        continuation_read_only=previous_session.response_is_read_only(
+                            request.previous_response_id or ""
+                        ),
+                    )
 
             if read_only_guard and required_tool_retry_prompt and not any(
                 name.lower() in {"read", "grep", "glob", "ls", "searchcodebase"}
@@ -484,18 +495,23 @@ def register_responses_routes(
                 studio_session = _studio_session_for_context(
                     app, studio_session, continuation_id,
                 )
+                studio_incremental = (
+                    studio_session is not None and studio_session.turn_count > 0
+                )
                 try:
                     studio_translated = translate_responses_request(
                         request,
-                        incremental=(
-                            studio_session is not None and studio_session.turn_count > 0
-                        ),
+                        incremental=studio_incremental,
                         system_override=system_override,
                         consumer_tool_max_chars=(
                             settings.consumer_prompt_max_chars if is_consumer else None
                         ),
+                        # The complete input was validated above. Incremental
+                        # translation removes its already-matched function_call
+                        # history, including for explicit session-header users
+                        # who do not send previous_response_id.
                         allow_unmatched_function_call_outputs=(
-                            previous_session is not None
+                            previous_session is not None or studio_incremental
                         ),
                     )
                 except ValueError as exc:
@@ -653,6 +669,7 @@ def register_responses_routes(
                         on_studio_fallback=note_studio_fallback,
                         on_router_fallback=note_router_fallback,
                         skip_router_fallback=is_tool_output_continuation,
+                        allow_final_answer=allow_final_answer,
                     )
                 else:
                     stream = _responses_stream(
@@ -733,6 +750,7 @@ def register_responses_routes(
                 on_studio_fallback=note_studio_fallback,
                 on_router_fallback=note_router_fallback,
                 skip_router_fallback=is_tool_output_continuation,
+                allow_final_answer=allow_final_answer,
             )
             if tool_names and planning_mode in {"studio", "router"}:
                 response.headers[TOOL_CALLING_HEADER] = call_record.get(
@@ -781,6 +799,7 @@ async def _complete_nonstream_response(
     on_studio_fallback,
     on_router_fallback,
     skip_router_fallback,
+    allow_final_answer=False,
 ):
     router_decided = False
 
@@ -897,6 +916,7 @@ async def _complete_nonstream_response(
         and tool_names
         and not read_only_guard
         and not declined
+        and not allow_final_answer
         and _looks_like_fake_file_claim(raw_text)
     ):
         log.info("  fake file claim detected, forcing corrective retry")

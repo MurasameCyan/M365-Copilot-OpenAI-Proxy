@@ -54,14 +54,14 @@ from .tool_call_parser import (
     _extract_tool_calls,
     _filter_read_only_tool_calls,
     _filter_schema_valid_tool_calls,
-    _has_read_only_intent,
+    _read_only_intent_for_messages,
     _looks_like_fake_file_claim,
     planner_fallback_needed,
     _strip_tool_call_blocks,
     split_no_tool_marker,
 )
 from .usage_store import estimate_text_tokens, estimate_upstream_input_tokens, openai_usage, usage_for_record
-from .translator import effective_tools, flatten_content, normalize_tool_choice, tool_description_lines, translate_openai_request
+from .translator import effective_tools, normalize_tool_choice, tool_description_lines, translate_openai_request
 from .tool_router import build_router_prompt, routed_or_answered, routed_or_streamed, router_applies
 
 
@@ -164,7 +164,9 @@ def register_chat_routes(
             _key_sp = ((_key_obj.system_prompt if _key_obj is not None else "") or "").strip()
             _system_override = _key_sp or getattr(app.state, 'system_prompt', '')
             run_permission = effective_run_permission(app, _key_obj)
-            read_only_guard = run_permission == "read_only" or _has_read_only_intent(*(flatten_content(m.content) for m in request.messages if m.role == "user"))
+            read_only_guard = run_permission == "read_only" or _read_only_intent_for_messages(
+                (m.role, m.content) for m in request.messages
+            )
             call_record["run_permission"] = run_permission
             call_record["read_only_guard"] = read_only_guard
             # Tool calling is tone-dependent (see tone_options.TONE_TOOL_CALLING),
@@ -571,7 +573,7 @@ def register_chat_routes(
         # file but emitted none, force one retry demanding a real tool_call.
         # A model that explicitly declined is exempt: it did answer the contract,
         # so re-asking would only bully it into a call the user never wanted.
-        if not tool_calls and tools and not read_only_guard and not declined and _looks_like_fake_file_claim(text):
+        if not tool_calls and tools and not read_only_guard and not declined and not allow_final_answer and _looks_like_fake_file_claim(text):
             _log.info("  fake file claim detected, forcing corrective retry")
             try:
                 retry_uses_studio = (
@@ -848,7 +850,7 @@ async def _openai_stream_with_tools(
             _log.info("  prose fallback synthesized Write tool_call")
     # Corrective retry: M365 native file-gen (hosted URL) instead of a tool_call.
     # Skipped when the model explicitly declined -- it answered the contract.
-    if not tool_calls and tool_names and not read_only_guard and not declined and _looks_like_fake_file_claim(full_text):
+    if not tool_calls and tool_names and not read_only_guard and not declined and not allow_final_answer and _looks_like_fake_file_claim(full_text):
         _log.info("  fake file claim detected, forcing corrective retry")
         try:
             retry_chunks: list[str] = []

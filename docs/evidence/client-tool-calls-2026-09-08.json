@@ -1,0 +1,121 @@
+{
+  "date": "2026-09-08",
+  "provider": "m365",
+  "tone": "Gpt_6_Astra",
+  "planning_mode": "studio",
+  "isolated_container_app": true,
+  "fixed_session_header": true,
+  "clients": [
+    {
+      "client": "Claude Code",
+      "version": "2.1.261",
+      "endpoint": "/v1/messages",
+      "stream": true,
+      "started_utc": "2026-09-08T00:33:45.902131+00:00",
+      "requests": 2,
+      "executed_tool": "Write",
+      "tool_calls": 1,
+      "cli_exit_code": 0,
+      "file_bytes": 2327,
+      "file_sha256": "c8d5b92e091f3d19dc5aadca5394ca22a7ed2591cfef78491e0ef1dab3a9c5b9",
+      "file_content_verified": true,
+      "tool_result_and_final_answer": true,
+      "tone_preserved": true,
+      "studio_only": true,
+      "same_conversation": true,
+      "container_temp_removed": true,
+      "steps": [
+        {
+          "http_status": 200,
+          "read_only_guard": false,
+          "planning": "studio",
+          "corrective_retry": false,
+          "sent_tone": "Gpt_6_Astra",
+          "fresh": true,
+          "completions": [
+            {
+              "turn_state": "Completed",
+              "result": "Success"
+            }
+          ]
+        },
+        {
+          "http_status": 200,
+          "read_only_guard": false,
+          "planning": "studio",
+          "corrective_retry": false,
+          "sent_tone": "Gpt_6_Astra",
+          "fresh": false,
+          "completions": [
+            {
+              "turn_state": "Completed",
+              "result": "Success"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "client": "Codex CLI",
+      "version": "0.153.4",
+      "endpoint": "/v1/responses",
+      "stream": true,
+      "started_utc": "2026-09-08T00:33:36.285087+00:00",
+      "requests": 2,
+      "executed_tool": "exec_command",
+      "tool_calls": 1,
+      "cli_exit_code": 0,
+      "file_bytes": 129,
+      "file_sha256": "d9ece82081d2ce1f70f4d2abd032756d78e5cf358df5695441ec5a477bab5d57",
+      "file_content_verified": true,
+      "tool_result_and_final_answer": true,
+      "tone_preserved": true,
+      "studio_only": true,
+      "same_conversation": true,
+      "container_temp_removed": true,
+      "steps": [
+        {
+          "http_status": 200,
+          "read_only_guard": false,
+          "planning": "studio",
+          "corrective_retry": false,
+          "sent_tone": "Gpt_6_Astra",
+          "fresh": true,
+          "completions": [
+            {
+              "turn_state": "Completed",
+              "result": "Success"
+            }
+          ]
+        },
+        {
+          "http_status": 200,
+          "read_only_guard": false,
+          "planning": "studio",
+          "corrective_retry": false,
+          "sent_tone": "Gpt_6_Astra",
+          "fresh": false,
+          "completions": [
+            {
+              "turn_state": "Completed",
+              "result": "Success"
+            }
+          ]
+        }
+      ],
+      "sandbox_mode": "workspace-write",
+      "windows_sandbox": "unelevated",
+      "approval_policy": "never",
+      "request_tools_rewritten": false,
+      "web_search": "disabled"
+    }
+  ],
+  "source_archive_sha256": "9007513e0f9723410653a3e281787a41fb20ce170549e9931052f615c80b3ab7",
+  "source_hashes": {
+    "response_helpers.py": "fa635b248dccf38013e3ea560be9316f1f7f6b41a671955b84b8c452ace7827b",
+    "routes_api_chat.py": "7e6a7aaa62410a9d84f23f96ee9df8c7597c687d9a872640aca15d692b1a744b",
+    "routes_api_messages.py": "6e509f5d0ccb93846ec763a4cd7bd52b58b77f34939a64f89a554217325069b0",
+    "routes_api_responses.py": "43d5d186f68c89925c21cd325671d23dac76da98eec6cd006cab83693fee46f5",
+    "tool_call_parser.py": "a7b4985f1623d3d1d1bcba0e1b6aa0a7481fc57bad779335625178aa11dc4151"
+  }
+}

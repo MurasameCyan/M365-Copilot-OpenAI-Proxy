@@ -680,7 +680,9 @@ def test_studio_context_marker_survives_session_store_reload(tmp_path):
 
 
 @pytest.mark.parametrize("stream", [False, True])
-def test_studio_incremental_translation_error_remains_bad_request(stream, tmp_path):
+def test_studio_incremental_translation_error_remains_bad_request(stream, tmp_path, monkeypatch):
+    import m365_copilot_openai_proxy.routes_api_responses as responses_routes
+
     app, _client, key, made = _studio_responses_continuation_app(tmp_path)
     client = TestClient(app, raise_server_exceptions=False)
     first = _tool_request(
@@ -688,6 +690,17 @@ def test_studio_incremental_translation_error_remains_bad_request(stream, tmp_pa
     )
     assert first.status_code == 200
     call = next(item for item in first.json()["output"] if item["type"] == "function_call")
+
+    # Matched full histories without previous_response_id are valid. Exercise
+    # the error boundary explicitly instead of requiring that valid case to fail.
+    original_translate = responses_routes.translate_responses_request
+
+    def reject_incremental(request, **kwargs):
+        if kwargs.get("incremental"):
+            raise ValueError("Invalid incremental function_call_output.")
+        return original_translate(request, **kwargs)
+
+    monkeypatch.setattr(responses_routes, "translate_responses_request", reject_incremental)
 
     continued = _tool_request(
         client, key, "responses", stream=stream,
@@ -1169,8 +1182,9 @@ def test_responses_studio_continuation_usage_matches_incremental_payload(tmp_pat
 
 
 @pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize("trailing_system", [False, True])
 def test_anthropic_studio_tool_continuation_reuses_studio_namespace(
-    stream, tmp_path
+    stream, trailing_system, tmp_path
 ):
     app, client, key, made = _studio_responses_continuation_app(tmp_path)
     first = client.post(
@@ -1209,7 +1223,12 @@ def test_anthropic_studio_tool_continuation_reuses_studio_namespace(
                         "content": "contents of /tmp/a.txt",
                     }],
                 },
-            ],
+            ] + ([{
+                # Real CC requests can append a token-budget system message
+                # after the tool_result. It must not start another planner turn.
+                "role": "system",
+                "content": [{"type": "text", "text": "<total_tokens>1000 tokens left</total_tokens>"}],
+            }] if trailing_system else []),
             "tools": [{
                 "name": "Read",
                 "description": "Read a file",
@@ -1221,6 +1240,7 @@ def test_anthropic_studio_tool_continuation_reuses_studio_namespace(
     assert continued.status_code == 200
     assert "studio-final-answer" in continued.text
     assert app.state.call_log[-1]["tool_planning"] == "studio"
+    assert "studio_fallback" not in app.state.call_log[-1]
     studio_clients = [item for item in made if item.studio]
     assert len(studio_clients) == 2
     assert [item.tones for item in studio_clients] == [["Claude_Sonnet"], ["Claude_Sonnet"]]

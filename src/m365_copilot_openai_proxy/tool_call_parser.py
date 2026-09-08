@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re as _re
 import uuid
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import SchemaError, best_match
@@ -19,10 +19,77 @@ _READ_ONLY_INTENT_RE = _re.compile(
     _re.IGNORECASE,
 )
 _READ_ONLY_TOOL_NAMES = {"read", "grep", "glob", "ls", "searchcodebase"}
+_SYSTEM_REMINDER_RE = _re.compile(
+    r"<system-reminder\b[^>]*>(.*?)</system-reminder\s*>",
+    _re.IGNORECASE | _re.DOTALL,
+)
+_PLAN_MODE_RE = _re.compile(
+    r"^[ \t]*(?:\#{1,6}[ \t]*)?"
+    r"(?:(?P<active>Plan mode (?:is|still) active\b)|You have exited plan mode\b|Exited Plan Mode\b)",
+    _re.IGNORECASE | _re.MULTILINE,
+)
 
 
 def _has_read_only_intent(*parts: str) -> bool:
     return any(_READ_ONLY_INTENT_RE.search(part or "") for part in parts)
+
+
+def _intent_content_text(content: object) -> str:
+    """Preserve text-block boundaries and exclude tool-result payloads."""
+    if isinstance(content, str):
+        return content
+    parts = []
+    for part in content if isinstance(content, list) else ():
+        if isinstance(part, Mapping):
+            kind, text = part.get("type"), part.get("text")
+        else:
+            kind, text = getattr(part, "type", None), getattr(part, "text", None)
+        if kind in ("text", "input_text", "output_text") and isinstance(text, str):
+            parts.append(text)
+    return "\n".join(parts)
+
+
+def _read_only_intent_for_messages(
+    messages: Iterable[tuple[str, object]], *, instructions: object = "",
+    continuation_read_only: bool = False,
+) -> bool:
+    """Infer this task's intent without treating client context as permissions.
+
+    CC places CLAUDE.md and memory in user-side system-reminder blocks. A rule
+    about one setting (e.g. "do not modify user.email") must not ban every Write.
+    The original messages still go to the model unchanged; this extraction only
+    scopes our coarse all-or-nothing tool filter. Configured permissions remain
+    a separate ceiling at each API entry point.
+
+    Tool-result-only turns have no user text, so they retain the most recent
+    real request's intent. A new request replaces that intent. Explicit CC plan
+    mode signals are tracked separately, including those sent as system text.
+    """
+    latest_user_read_only = continuation_read_only
+    user_plan_mode = False
+    system_plan_mode = None
+    for role, content in [*messages, ("system", instructions)]:
+        if role not in ("user", "system", "developer"):
+            continue
+        text = _intent_content_text(content)
+        if not text:
+            continue
+        # A plan reminder is a real execution constraint. Do not mistake the
+        # word "read-only" in a skill/agent description for such a constraint.
+        plan_text = _SYSTEM_REMINDER_RE.sub(lambda match: "\n" + match[1] + "\n", text)
+        for mode_match in _PLAN_MODE_RE.finditer(plan_text):
+            active = mode_match.group("active") is not None
+            if role == "user":
+                user_plan_mode = active
+            else:
+                system_plan_mode = active
+        if role == "user":
+            user_text = _SYSTEM_REMINDER_RE.sub("", text).strip()
+            if user_text:
+                latest_user_read_only = _has_read_only_intent(user_text)
+    # Current system instructions outrank older user-side mode reminders.
+    plan_mode = system_plan_mode if system_plan_mode is not None else user_plan_mode
+    return plan_mode or latest_user_read_only
 
 
 def _tool_call_name(tool_call: dict) -> str:

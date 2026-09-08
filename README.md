@@ -79,7 +79,7 @@
 | `Claude_Sonnet` | `claude-sonnet-4-6` | `claude-sonnet-4-6-持续` | Claude Sonnet |
 | `Claude_Sonnet_Reasoning` | `claude-sonnet-4-5` | `claude-sonnet-4-5-持续` | Claude Sonnet 思考 |
 | `Claude_Fable` | `claude-fable-5` | `claude-fable-5-持续` | Claude Fable |
-| `Claude_Opus` | `claude-opus` | `claude-opus-持续` | Claude Opus |
+| `Claude_Opus` | `claude-opus` | `claude-opus-持续` | Studio 路径实测成功；普通直连失败，见[使用限制](#claude-opus-使用限制) |
 | `Gpt_6_Astra` | `gpt-6_Chat` | `gpt-6_Chat-持续` | 普通直连与 Studio 实测成功，底层型号未确认 |
 | `Gpt_6_Reasoning` | `gpt-6` | `gpt-6-持续` | Studio 路径实测成功；普通直连失败，使用前见下方限制 |
 | `Gpt_5_6_Chat` | `gpt-5.6_Chat` | `gpt-5.6_Chat-持续` | GPT 5.6 快速 |
@@ -130,6 +130,14 @@ Docker 部署升级时，需要在部署目录执行 `docker compose pull`，再
 三个兼容 API 的 Studio 工具首轮、结果续轮、纠正重试，以及进入 Studio 的路由回退，都使用客户端所选模型解析出的 tone。升级前固定 `Magic` 的 Studio 会话会与新版会话隔离；切换 tone 会隔离上游线程，A→B→A 切回时按客户端历史恢复必要上下文。这里保证的是代理实际发送的 tone；回退到普通路径能否成功，仍取决于该 tone 在那条路径上的可用性。
 
 某个模式能不能用由 M365 侧的 rollout 决定：M365 拒绝服务的模式在响应尚未开始时会返回 **400** 并在错误里点名该模式，不会静默回一句「Sorry, I wasn't able to respond to that.」当成模型回复。流式响应已经开始时，HTTP 状态可能仍为 200，错误会写入流或正文，调用方必须检查最终内容。用 400 而非 502，是因为重试改变不了上游的拒绝——502 会让客户端把它当成网关故障反复重试。传输层故障（空闲超时、断流）与凭据问题仍然是 502。想知道当前账号实际能用哪些，跑仓库根目录的 `scan_tones.py`。
+
+#### Claude Opus 使用限制
+
+**2026-09-08、同一 M365 账户**实测：`Claude_Opus` 普通直连问答两次均为 `Failed / InternalError`，没有业务答案；显式携带现有有效 Studio agent 的问答成功，Studio 下真实的 `Read → 工具结果 → 最终回答` 流程也成功，首轮及续轮发送的 tone 始终为 `Claude_Opus`。本轮未验证普通路径的原生工具调用，可用性仅限该账户和时间窗口。
+
+使用时选择 `claude-opus`（或直接传 `Claude_Opus`），并遵循[上节的 Studio 步骤和限制](#astra-与-reasoning-的区别及使用限制)：账户的 Studio agent 必须已就绪，工具调用规划设为 `studio`，请求的有效 `tools` 非空且 `tool_choice` 不是 `none`；续轮继续保留相同模型和有效工具定义。无工具纯聊天即使设置了 Studio 也会走普通直连，不能据附加 agent 的问答实验认定纯聊天可用。
+
+默认映射仍为 `Claude_Opus | claude-opus`。候选 `Claude_Opus_4_8`、`Claude_Opus_5` 在普通和 Studio 路径都只返回 SignalR type 3 调用错误，未测通可单独指定版本的新 tone；通用 `Claude_Opus` 的成功也不能确认底模为 Opus 4.8 或 5。普通直连失败时，改显示名、拼接版本名或模型自述都不能作为调用恢复或底层版本确认的依据。
 
 #### 请求示例
 
@@ -372,7 +380,7 @@ docker compose up -d
 
 - **Function tools**：支持扁平定义（例如 `{"type":"function","name":"Read",...}`），也支持 `{"type":"namespace","name":"filesystem","description":"...","tools":[...]}` 分组。`namespace` 只承载元数据，内部目前仅接受 `function`；代理会把子函数展平给微软上游，并在返回的 `function_call` 上恢复 `namespace`。由于上游只生成裸函数名，namespace 子函数名不得与其他 namespace 子函数或同名扁平函数重复。模型返回 `function_call` 后，由调用方执行函数，再把同一 `call_id` 的 `function_call_output`（以及需要保留的 `function_call` / 消息历史）放入下一次 `input`；重复此循环，直到返回最终 `message`。`strict:true` 会在代理侧按声明的 JSON Schema 校验模型参数；不合规调用不会返回给客户端。Microsoft 上游仍没有原生 schema 强制。
 - **Tool choice**：支持 `auto`、`none`、`required` 和 named function（例如 `{"type":"function","name":"Read"}`）。`required` 与 named function 会严格执行：上游首次未返回合法调用时代理重试一次，连续两次失败后，非流式请求返回 HTTP 502，流式请求以 `error` + `response.failed` 结束。`allowed_tools` 当前不支持，并在请求上游前返回 HTTP 400。
-- **Codex CLI**：实测 Codex CLI 0.145.0 的自定义 Responses provider 请求可能同时包含 `function`、`namespace` 和 `web_search`。前两者可用；`web_search` 没有等价微软上游能力，仍会在请求上游前返回 HTTP 400。使用本代理时需关闭 Codex Web Search：
+- **Codex CLI**：已核对 0.145.0 的请求形态，并用 **0.153.4** 完成真实工具流程。自定义 Responses provider 支持本次客户端声明的 `function` 和 `namespace` 工具；`web_search` 没有等价微软上游能力，仍会在请求上游前返回 HTTP 400。使用本代理时需关闭 Codex Web Search：
 
   ```toml
   web_search = "disabled"
@@ -385,6 +393,25 @@ docker compose up -d
 - **Consumer 续接**：Consumer 是无状态桥接，每轮都会新建上游对话，`previous_response_id` 不会恢复服务端历史。调用方必须在下一次 `input` 中重发完整的 `input` 历史，包括相关消息、`function_call` 和 `function_call_output`。Consumer 返回的 `resp_...` 只是当前响应标识，不是服务端续接句柄。
 - **资源 API 不支持**：方案 A 只注册 `POST /v1/responses`，不提供响应存储、`GET /v1/responses/{response_id}`、`DELETE /v1/responses/{response_id}` 或 `POST /v1/responses/{response_id}/cancel`；`store` 不会创建可供后续读取的响应资源。
 - **非函数与托管工具不支持**：OpenAI 托管的 `web_search`、`file_search`、`computer_use`、`code_interpreter` 等工具，以及 `custom`、`shell`、`local_shell` 等非 function 工具，会在请求上游前返回 HTTP 400。Function tool 的 `allowed_callers`、`defer_loading:true`、`output_schema` 也因缺少等价执行语义而明确返回 HTTP 400；namespace 内的 `custom` 子项同样不支持。
+
+### CC / Codex 工具调用实测
+
+**2026-09-08**，使用同一 M365 账户、有效 Studio agent 和 `Gpt_6_Astra`，在目标容器内运行候选源码，由真实客户端执行文件创建，再回传真实工具结果：
+
+| 客户端 | 接口 | 实际工具流程 | 结果 |
+| --- | --- | --- | --- |
+| Claude Code 2.1.261 | 流式 `/v1/messages` | `Write` 创建 SVG 动画 HTML → `tool_result` → 最终确认 | 2 轮成功，文件 2327 字节，CLI 退出码 0 |
+| Codex CLI 0.153.4 | 流式 `/v1/responses` | 内建 `exec_command` 创建 HTML → `function_call_output` → 最终确认 | 2 轮成功，文件 129 字节，CLI 退出码 0 |
+
+两种客户端都保留实际工具声明与默认/auto 工具选择，文件内容经过 SHA-256 比对；两轮出站 tone 均为 `Gpt_6_Astra`，保持同一 Studio 会话，没有额外纠错重试或 Router/普通路径回退。测试使用固定会话 Header，覆盖完整工具历史的会话复用；没有改写 Codex 的 tools 或 input 来适配测试。
+
+使用上述流程需要将 Key 的「工具调用规划」设为 **Studio Agent**，确保绑定账户的 agent 已就绪，并在结果续轮保留模型和有效工具定义。文件写入还需要代理的有效运行权限为 `full`，客户端自身允许写入。模型默认显示名为 `gpt-6_Chat`；自定义名称以实际配置映射为准，排查时可直接传 `Gpt_6_Astra` 并核对调用日志中的 `tone`。
+
+本次修复了 CC 上下文触发全局只读误判、尾部 system 消息导致工具续轮重新规划、正常“文件已创建”确认被强制重试，以及 Codex 完整历史在 Studio 增量转换时误报缺少 `function_call` 的问题。明确只读请求、管理员/Key 权限上限、CC Plan mode、强制工具选择和非法工具结果配对检查仍保留。
+
+Codex 本次使用 `web_search="disabled"`。原生 Windows 的隔离配置中，还启用了 `windows.sandbox="unelevated"`，保持 `workspace-write` 与 `approval_policy="never"`；未启用原生 sandbox 时，本机 CLI 曾将 workspace-write 降为只读，这是客户端执行权限问题。正常配置可参照 [Codex 官方配置说明](https://developers.openai.com/codex/config-reference/)。这组测试验证的是 Astra 的 Studio 文件工具流程，不代表所有 tone、工具类型或普通直连路径均已验证。
+
+完整过程与[脱敏证据](docs/evidence/client-tool-calls-2026-09-08.json)见[客户端实测报告](docs/cc-codex-tool-verification-2026-09-08.md)。发布新镜像后，已有运行容器仍需拉取镜像并重建才能使用修复。
 
 ## 多账户刷新与保活
 

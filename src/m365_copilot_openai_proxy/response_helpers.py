@@ -551,6 +551,7 @@ async def _responses_stream_with_tools(
     on_studio_fallback: Callable[[str], None] | None = None,
     on_router_fallback: Callable[[str], None] | None = None,
     skip_router_fallback: bool = False,
+    allow_final_answer: bool = False,
 ) -> AsyncIterator[str]:
     resp_id = response_id or f"resp_{uuid.uuid4().hex}"
     created = int(time.time())
@@ -664,6 +665,7 @@ async def _responses_stream_with_tools(
             and names
             and not read_only_guard
             and not declined
+            and not allow_final_answer
             and _looks_like_fake_file_claim(full_text)
         ):
             retry_prompt = (
